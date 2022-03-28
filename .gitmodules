@@ -1,3 +1,6 @@
 [submodule "3rdparty/sputnik"]
 	path = 3rdparty/sputnik
 	url = https://github.com/google-research/sputnik.git
+[submodule "3rdparty/dgsparse"]
+	path = 3rdparty/dgsparse
+	url = https://github.com/dgSPARSE/dgSPARSE-Library.git
