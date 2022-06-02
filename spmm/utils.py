@@ -37,8 +37,8 @@ def get_graph(dataset_name: str):
         return products[0][0].int()
     elif dataset_name == 'ppi':
         ppi = dgl.data.PPIDataset()
-        gs = dgl.batch(ppi).int()
-        return gs, False, {}
+        g = dgl.batch(ppi).int()
+        return g
     elif dataset_name == 'reddit':
         reddit = dgl.data.RedditDataset()
         return reddit[0].int()
