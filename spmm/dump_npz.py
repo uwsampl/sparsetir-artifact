@@ -4,8 +4,8 @@ import numpy as np
 import os
 from utils import get_graph
 
-#if not os.path.exists('./path'):
-#    os.mkdir('data')
+if not os.path.exists('data'):
+   os.mkdir('data')
 
 for dataset_name in ["arxiv", "pubmed", "ppi", "reddit", "proteins"]:
     print("dumping dataset {}".format(dataset_name))
