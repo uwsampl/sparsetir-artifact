@@ -189,6 +189,8 @@ int main(int argc, const char **argv) {
       GESPMM_ALG_SEQREDUCE_NNZBALANCE,  GESPMM_ALG_PARREDUCE_NNZBALANCE,
       GESPMM_ALG_ROWCACHING_ROWBALANCE, GESPMM_ALG_ROWCACHING_NNZBALANCE};
 
+  float best_dur = 1e9;
+
   for (auto alg : algs) {
 
     //
@@ -209,7 +211,7 @@ int main(int argc, const char **argv) {
 
     bool correct = check_result<float>(M, N, C_h, C_ref);
 
-    if (correct) {
+    //if (correct) {
 
       // benchmark GE-SpMM performance
 
@@ -227,6 +229,10 @@ int main(int argc, const char **argv) {
 
       float kernel_dur_msecs = gpu_timer.elapsed_msecs() / repeat_iter;
 
+      if (kernel_dur_msecs < best_dur) {
+        best_dur = kernel_dur_msecs;
+      }
+
       float MFlop_count = (float)nnz / 1e6 * N * 2;
 
       float gflops = MFlop_count / kernel_dur_msecs;
@@ -235,8 +241,10 @@ int main(int argc, const char **argv) {
              "%f (nnz=%d) \n Time %f (ms), Throughput %f (gflops).\n",
              alg, M, K, K, N, (float)nnz / M / K, nnz, kernel_dur_msecs,
              gflops);
-    }
+    // }
   }
+
+  printf("Best: %f (ms)\n", best_dur);
 
   /// free memory
 
