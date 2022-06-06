@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
+#include <cnpy.h>
 #include <cuda_runtime_api.h>
 #include <cusparse.h>
 #include <fstream>
@@ -12,6 +13,17 @@
 
 /* This example need CUDA Version >=11.3 */
 // correspond with benchmark
+
+void read_npz_file(const std::string& filename, int &M, int &K, int &NNZ, std::vector<int>& indptr, std::vector<int>& indices) {
+  cnpy::npz_t data = cnpy::npz_load(filename);
+  cnpy::NpyArray shape = data["shape"];
+  int* shape_data = shape.data<int>();
+  M = shape_data[0];
+  K = shape_data[1];
+  NNZ = shape_data[2];
+  indptr = std::move(data["indptr"].as_vec<int>());
+  indices = std::move(data["indices"].as_vec<int>());
+}
 
 int main(int argc, char *argv[]) {
   // check command-line argument
@@ -33,7 +45,9 @@ int main(int argc, char *argv[]) {
   std::vector<int>
       csr_indices_buffer; // buffer for indices (column-ids) array in CSR format
   // load sparse matrix from mtx file
-  read_mtx_file(argv[1], M, N, nnz, csr_indptr_buffer, csr_indices_buffer);
+  // read_mtx_file(argv[1], M, N, nnz, csr_indptr_buffer, csr_indices_buffer);
+  read_npz_file(argv[1], M, N, nnz, csr_indptr_buffer, csr_indices_buffer);
+ 
   printf("Finish reading matrix %d rows, %d columns, %d nnz. \nIgnore original "
          "values and use randomly generated values.\n",
          M, N, nnz);

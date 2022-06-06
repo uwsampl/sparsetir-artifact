@@ -2,4 +2,3 @@ __pycache__/
 dataset
 data/
 log
-*.log
