@@ -42,11 +42,19 @@ int main(int argc, char *argv[]) {
   int N;                              // number of S-columns
   int nnz;                            // number of non-zeros in S
   std::vector<int> csr_indptr_buffer; // buffer for indptr array in CSR format
+  std::vector<int> row_buffer;
   std::vector<int>
       csr_indices_buffer; // buffer for indices (column-ids) array in CSR format
   // load sparse matrix from mtx file
   // read_mtx_file(argv[1], M, N, nnz, csr_indptr_buffer, csr_indices_buffer);
   read_npz_file(argv[1], M, N, nnz, csr_indptr_buffer, csr_indices_buffer);
+  int row = 0;
+  for (int i = 0; i < csr_indptr_buffer.size() - 1; ++i) {
+    for (int j = 0; j < csr_indptr_buffer[i + 1] - csr_indptr_buffer[i]; ++j) {
+      row_buffer.push_back(row);
+    } 
+    row++;
+  }
  
   printf("Finish reading matrix %d rows, %d columns, %d nnz. \nIgnore original "
          "values and use randomly generated values.\n",
@@ -64,7 +72,7 @@ int main(int argc, char *argv[]) {
   float *A_h = NULL, *B_h = NULL, *C_h = NULL, *csr_values_h = NULL,
         *C_ref = NULL;
   float *A_d = NULL, *B_d = NULL, *C_d = NULL, *csr_values_d = NULL;
-  int *csr_indptr_d = NULL, *csr_indices_d = NULL;
+  int *csr_indptr_d = NULL, *csr_indices_d = NULL, *row_d = NULL;
   A_h = (float *)malloc(sizeof(float) * M * K);
   B_h = (float *)malloc(sizeof(float) * N * K);
   C_h = (float *)malloc(sizeof(float) * nnz);
@@ -90,6 +98,7 @@ int main(int argc, char *argv[]) {
   CUDA_CHECK(cudaMalloc((void **)&C_d, sizeof(float) * nnz));
   CUDA_CHECK(cudaMalloc((void **)&csr_values_d, sizeof(float) * nnz));
   CUDA_CHECK(cudaMalloc((void **)&csr_indptr_d, sizeof(int) * (M + 1)));
+  CUDA_CHECK(cudaMalloc((void **)&row_d, sizeof(int) * nnz));
   CUDA_CHECK(cudaMalloc((void **)&csr_indices_d, sizeof(int) * nnz));
 
   CUDA_CHECK(
@@ -101,6 +110,8 @@ int main(int argc, char *argv[]) {
                         cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(csr_indptr_d, csr_indptr_buffer.data(),
                         sizeof(int) * (M + 1), cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(row_d, row_buffer.data(),
+                        sizeof(int) * nnz, cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(csr_indices_d, csr_indices_buffer.data(),
                         sizeof(int) * nnz, cudaMemcpyHostToDevice));
 
@@ -197,7 +208,29 @@ int main(int argc, char *argv[]) {
     float MFlop_count = (float)nnz / 1e6 * K * 2;
     float gflops = MFlop_count / kernel_dur_msecs;
 
-    printf("[SDDMM] Report: sddmm (A(%d x %d) * B^T(%d x %d)) odot S(%d x %d) "
+    printf("[SDDMM-csr] Report: sddmm (A(%d x %d) * B^T(%d x %d)) odot S(%d x %d) "
+           "sparsity "
+           "%f (nnz=%d) \n Time %f (ms), Throughput %f (gflops).\n",
+           M, K, N, K, M, N, (float)nnz / M / K, nnz, kernel_dur_msecs, gflops);
+  }
+
+  if (1) {
+    // benchmark GE-SpMM performance
+    GpuTimer gpu_timer;
+    int warmup_iter = 10;
+    int repeat_iter = 100;
+    for (int iter = 0; iter < warmup_iter + repeat_iter; iter++) {
+      if (iter == warmup_iter) {
+        gpu_timer.start();
+      }
+      sddmm_cuda_coo(K, nnz, row_d, csr_indices_d, A_d, B_d, C_d);
+    }
+    gpu_timer.stop();
+    float kernel_dur_msecs = gpu_timer.elapsed_msecs() / repeat_iter;
+    float MFlop_count = (float)nnz / 1e6 * K * 2;
+    float gflops = MFlop_count / kernel_dur_msecs;
+
+    printf("[SDDMM-coo] Report: sddmm (A(%d x %d) * B^T(%d x %d)) odot S(%d x %d) "
            "sparsity "
            "%f (nnz=%d) \n Time %f (ms), Throughput %f (gflops).\n",
            M, K, N, K, M, N, (float)nnz / M / K, nnz, kernel_dur_msecs, gflops);
@@ -223,6 +256,8 @@ int main(int argc, char *argv[]) {
     CUDA_CHECK(cudaFree(C_d));
   if (csr_values_d)
     CUDA_CHECK(cudaFree(csr_values_d));
+  if (row_d)
+    CUDA_CHECK(cudaFree(row_d));
   if (csr_indptr_d)
     CUDA_CHECK(cudaFree(csr_indptr_d));
   if (csr_indices_d)
