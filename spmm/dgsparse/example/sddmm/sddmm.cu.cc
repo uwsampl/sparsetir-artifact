@@ -149,6 +149,11 @@ int main(int argc, char *argv[]) {
       csrDescr, CUDA_R_32F, CUSPARSE_SDDMM_ALG_DEFAULT, &bufferSize));
   CUDA_CHECK(cudaMalloc(&dBuffer, bufferSize));
 
+  CUSPARSE_CHECK(cusparseSDDMM_preprocess(
+      handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+      CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, AMatDecsr, BMatDecsr, &beta,
+      csrDescr, CUDA_R_32F, CUSPARSE_SDDMM_ALG_DEFAULT, dBuffer));
+
   CUSPARSE_CHECK(cusparseSDDMM(
       handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
       CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, AMatDecsr, BMatDecsr, &beta,
@@ -183,7 +188,7 @@ int main(int argc, char *argv[]) {
         "[cuSPARSE] Report: sddmm (A(%d x %d) * B^T(%d x %d)) odot S(%d x %d) "
         "sparsity "
         "%f (nnz=%d) \n Time %f (ms), Throughput %f (gflops).\n",
-        M, K, N, K, M, N, (float)nnz / M / K, nnz, kernel_dur_msecs, gflops);
+        M, K, N, K, M, N, (float)nnz / M / N, nnz, kernel_dur_msecs, gflops);
   }
 
   //
@@ -211,7 +216,7 @@ int main(int argc, char *argv[]) {
     printf("[SDDMM-csr] Report: sddmm (A(%d x %d) * B^T(%d x %d)) odot S(%d x %d) "
            "sparsity "
            "%f (nnz=%d) \n Time %f (ms), Throughput %f (gflops).\n",
-           M, K, N, K, M, N, (float)nnz / M / K, nnz, kernel_dur_msecs, gflops);
+           M, K, N, K, M, N, (float)nnz / M / N, nnz, kernel_dur_msecs, gflops);
   }
 
   if (1) {
@@ -233,7 +238,7 @@ int main(int argc, char *argv[]) {
     printf("[SDDMM-coo] Report: sddmm (A(%d x %d) * B^T(%d x %d)) odot S(%d x %d) "
            "sparsity "
            "%f (nnz=%d) \n Time %f (ms), Throughput %f (gflops).\n",
-           M, K, N, K, M, N, (float)nnz / M / K, nnz, kernel_dur_msecs, gflops);
+           M, K, N, K, M, N, (float)nnz / M / N, nnz, kernel_dur_msecs, gflops);
   }
 
   /// free memory
