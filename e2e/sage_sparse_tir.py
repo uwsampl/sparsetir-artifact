@@ -10,9 +10,8 @@ import torch.nn.functional as F
 
 from torch.utils.dlpack import to_dlpack as th_to_dlpack
 from torch.utils.dlpack import from_dlpack as th_from_dlpack
-from ogb.nodeproppred import DglNodePropPredDataset, Evaluator
 
-from utils import Logger
+from utils import Logger, get_dataset
 import tvm
 import tvm.testing
 import tvm.tir as tir
@@ -48,6 +47,7 @@ def csrmm(
             C[i, k1, k2, k3] = 0.0
         C[i, k1, k2, k3] = C[i, k1, k2, k3] + A[i, j] * B[j, k1, k2, k3]
 
+
 @T.prim_func
 def ell(
     a: T.handle,
@@ -65,6 +65,7 @@ def ell(
     A = T.match_sparse_buffer(a, (O, I, J), "float32")
     T.evaluate(0)
 
+
 def csr2ell_inv_index_map(o, i, j):
     return i, j
 
@@ -75,6 +76,7 @@ def csr2ell_index_map(i, j):
 
 kernels = {}
 kernel_args = {}
+
 
 class SpMM(torch.autograd.Function):
     @staticmethod
@@ -99,10 +101,9 @@ class SpMM(torch.autograd.Function):
         f(*args)
         return dX
 
+
 class SAGEConv(nn.Module):
-    def __init__(self,
-                 in_feats,
-                 out_feats):
+    def __init__(self, in_feats, out_feats):
         super(SAGEConv, self).__init__()
 
         self._in_src_feats, self._in_dst_feats = in_feats, in_feats
@@ -113,7 +114,7 @@ class SAGEConv(nn.Module):
 
     def reset_parameters(self):
         """Reinitialize learnable parameters."""
-        gain = nn.init.calculate_gain('relu')
+        gain = nn.init.calculate_gain("relu")
         nn.init.xavier_uniform_(self.fc_self.weight, gain=gain)
         nn.init.xavier_uniform_(self.fc_neigh.weight, gain=gain)
 
@@ -140,13 +141,9 @@ class SAGEConv(nn.Module):
 
         return rst
 
+
 class GraphSAGE(nn.Module):
-    def __init__(self,
-                 in_feats,
-                 hidden_feats,
-                 out_feats,
-                 num_layers,
-                 dropout):
+    def __init__(self, in_feats, hidden_feats, out_feats, num_layers, dropout):
         super(GraphSAGE, self).__init__()
 
         self.layers = nn.ModuleList()
@@ -178,40 +175,24 @@ class GraphSAGE(nn.Module):
 
         return x.log_softmax(dim=-1)
 
-def train(model, feats, y_true, train_idx, optimizer):
+
+def train(dataset, model, feats, y_true, train_idx, optimizer):
     model.train()
 
     optimizer.zero_grad()
     out = model(feats)[train_idx]
-    loss = F.nll_loss(out, y_true.squeeze(1)[train_idx])
+    if dataset == "ppi":
+        loss = F.binary_cross_entropy_with_logits(out, y_true[train_idx])
+    else:
+        loss = F.nll_loss(out, y_true[train_idx])
     loss.backward()
     optimizer.step()
 
     return loss.item()
 
-@torch.no_grad()
-def test(model, feats, y_true, split_idx, evaluator):
-    model.eval()
-
-    out = model(feats)
-    y_pred = out.argmax(dim=-1, keepdim=True)
-
-    train_acc = evaluator.eval({
-        'y_true': y_true[split_idx['train']],
-        'y_pred': y_pred[split_idx['train']],
-    })['acc']
-    valid_acc = evaluator.eval({
-        'y_true': y_true[split_idx['valid']],
-        'y_pred': y_pred[split_idx['valid']],
-    })['acc']
-    test_acc = evaluator.eval({
-        'y_true': y_true[split_idx['test']],
-        'y_pred': y_pred[split_idx['test']],
-    })['acc']
-
-    return train_acc, valid_acc, test_acc
 
 def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
+    print(feat_sizes)
     global kernels
     global kernel_args
     for forward in [True, False]:
@@ -221,7 +202,10 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
         n = mat.shape[1]
         nnz = mat.nnz
         per_column_part_size = (n + column_part - 1) // column_part
-        sub_mats = [mat[:, i * per_column_part_size : (i + 1) * per_column_part_size] for i in range(column_part)]
+        sub_mats = [
+            mat[:, i * per_column_part_size : (i + 1) * per_column_part_size]
+            for i in range(column_part)
+        ]
 
         num_buckets = len(buckets)
         ell_n = []
@@ -232,13 +216,22 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
             in_degrees = sub_mat.indptr[1:] - sub_mat.indptr[:-1]
             for i, bucket_size in enumerate(bucket_sizes[:-1]):
                 last_bucket_size = 0 if i == 0 else bucket_sizes[i - 1]
-                ell_n.append(int(((in_degrees > last_bucket_size) & (in_degrees <= bucket_size)).sum()))
+                ell_n.append(
+                    int(
+                        (
+                            (in_degrees > last_bucket_size)
+                            & (in_degrees <= bucket_size)
+                        ).sum()
+                    )
+                )
                 if column_part == 1:
                     is_bucket_atomic.append(False)
                 else:
                     is_bucket_atomic.append(True)
             sub_indegrees = in_degrees[in_degrees > bucket_sizes[-2]]
-            ell_n.append(int(((sub_indegrees + bucket_sizes[-1] - 1) // bucket_sizes[-1]).sum()))
+            ell_n.append(
+                int(((sub_indegrees + bucket_sizes[-1] - 1) // bucket_sizes[-1]).sum())
+            )
             is_bucket_atomic.append(True)
         print(ell_n)
         print(nnz / (sum([b * sub_nnz for b, sub_nnz in zip(buckets, ell_n)])))
@@ -254,32 +247,42 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
             for i, bucket_size in enumerate(bucket_sizes[:-1]):
                 last_bucket_size = 0 if i == 0 else bucket_sizes[i - 1]
                 ell_rows.append(
-                    ((in_degrees > last_bucket_size) & (in_degrees <= bucket_size)).nonzero()[0]
+                    (
+                        (in_degrees > last_bucket_size) & (in_degrees <= bucket_size)
+                    ).nonzero()[0]
                 )
             ell_rows.append((in_degrees > bucket_sizes[-2]).nonzero()[0])
 
             for i, bucket_size in enumerate(bucket_sizes[:-1]):
                 indices = np.zeros(
-                    (ell_n[partition * len(bucket_sizes) + i], bucket_size), dtype=np.int32
+                    (ell_n[partition * len(bucket_sizes) + i], bucket_size),
+                    dtype=np.int32,
                 )
                 a = np.zeros(
-                    (ell_n[partition * len(bucket_sizes) + i], bucket_size), dtype=np.float32
+                    (ell_n[partition * len(bucket_sizes) + i], bucket_size),
+                    dtype=np.float32,
                 )
                 for j, row_id in enumerate(ell_rows[partition * len(bucket_sizes) + i]):
                     row = sub_mat[row_id]
-                    indices[j, : row.nnz] = row.indices + partition * per_column_part_size
+                    indices[j, : row.nnz] = (
+                        row.indices + partition * per_column_part_size
+                    )
                     a[j, : row.nnz] = row.data
                 ell_indices.append(indices)
                 ell_a.append(a)
 
             # split rows for the last bucket
             indices = np.zeros(
-                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]), dtype=np.int32
+                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]),
+                dtype=np.int32,
             )
             a = np.zeros(
-                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]), dtype=np.float32
+                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]),
+                dtype=np.float32,
             )
-            new_rows = np.zeros((ell_n[(partition + 1) * len(bucket_sizes) - 1],), dtype=np.int32)
+            new_rows = np.zeros(
+                (ell_n[(partition + 1) * len(bucket_sizes) - 1],), dtype=np.int32
+            )
             bucket_size = bucket_sizes[-1]
             i = 0
             for row_id in ell_rows[-1]:
@@ -288,7 +291,8 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
                     if start_offset + bucket_size >= row.nnz:
                         # last bucket
                         indices[i, : row.nnz - start_offset] = (
-                            row.indices[start_offset:] + partition * per_column_part_size
+                            row.indices[start_offset:]
+                            + partition * per_column_part_size
                         )
                         a[i, : row.nnz - start_offset] = row.data[start_offset:]
                     else:
@@ -309,10 +313,16 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
         ell_a_nd = []
         ell_indices_j_nd = []
         for i in range(num_buckets):
-            ell_indices_i_nd.append(tvm.nd.array(ell_rows[i].astype("int32"), device=tvm.cuda(0)))
-            ell_a_nd.append(tvm.nd.array(ell_a[i].reshape(-1).astype("float32"), device=tvm.cuda(0)))
+            ell_indices_i_nd.append(
+                tvm.nd.array(ell_rows[i].astype("int32"), device=tvm.cuda(0))
+            )
+            ell_a_nd.append(
+                tvm.nd.array(ell_a[i].reshape(-1).astype("float32"), device=tvm.cuda(0))
+            )
             ell_indices_j_nd.append(
-                tvm.nd.array(ell_indices[i].reshape(-1).astype("int32"), device=tvm.cuda(0))
+                tvm.nd.array(
+                    ell_indices[i].reshape(-1).astype("int32"), device=tvm.cuda(0)
+                )
             )
 
         args = []
@@ -363,7 +373,9 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
                 param_map[params[10 + 7 * i + 5]] = n
                 param_map[params[10 + 7 * i + 6]] = ell_n[i]
 
-            mod["main"] = mod["main"].specialize(param_map).with_attr("horizontal_fuse", True)
+            mod["main"] = (
+                mod["main"].specialize(param_map).with_attr("horizontal_fuse", True)
+            )
 
             # schedule
             sch = tvm.tir.Schedule(mod)
@@ -390,7 +402,7 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
                 sch.bind(foo, "blockIdx.y")
                 sch.unroll(foi)
                 sch.unroll(j)
-                io, ioi, ii = sch.split(i, [None, bucket_sizes[-1] // bucket_size, 1])
+                io, ioi, ii = sch.split(i, [None, bucket_sizes[-1] // bucket_size, 8])
                 sch.bind(io, "blockIdx.x")
                 sch.bind(ii, "threadIdx.y")
                 init_blk = sch.decompose_reduction(blk, fi)
@@ -403,57 +415,76 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
             f = tvm.build(mod, target="cuda")
 
             kernels[(feat_size, forward)] = f
-        
-        
-def closest_power_2(x: int):
+
+
+def nearest_power_2(x: int):
     ret = 1
-    while ret < x:
+    while ret < x or ret < 32:
         ret = ret * 2
     return ret
 
+
+bucketing_config = {
+    "arxiv": [1, 2, 4, 8, 16, 32],
+    "proteins": [1, 2, 4, 8, 16, 32, 64, 128, 256],
+    "pubmed": [1, 2, 4, 8, 16, 32],
+    "ppi": [1, 2, 4, 8, 16, 32],
+    "reddit": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
+}
+
+col_part = {
+    "arxiv": 1,
+    "proteins": 8,
+    "pubmed": 1,
+    "ppi": 8,
+    "reddit": 8,
+}
+
 def main():
-    parser = argparse.ArgumentParser(description='OGBN-Arxiv (GraphSAGE Full-Batch)')
-    parser.add_argument('--device', type=int, default=0)
-    parser.add_argument('--log_steps', type=int, default=1)
-    parser.add_argument('--num_layers', type=int, default=3)
-    parser.add_argument('--hidden_channels', type=int, default=256)
-    parser.add_argument('--dropout', type=float, default=0.5)
-    parser.add_argument('--lr', type=float, default=0.01)
-    parser.add_argument('--epochs', type=int, default=500)
-    parser.add_argument('--runs', type=int, default=10)
-    parser.add_argument("--eval", action='store_true',
-                        help='If not set, we will only do the training part.')
+    parser = argparse.ArgumentParser(description="OGBN-Arxiv (GraphSAGE Full-Batch)")
+    parser.add_argument("--dataset", type=str, default="arxiv")
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--num_layers", type=int, default=3)
+    parser.add_argument("--hidden_channels", type=int, default=128)
+    parser.add_argument("--dropout", type=float, default=0.5)
+    parser.add_argument("--lr", type=float, default=0.01)
+    parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--runs", type=int, default=10)
     args = parser.parse_args()
     print(args)
 
-    device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
+    device = f"cuda:{args.device}" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
 
-    dataset = DglNodePropPredDataset(name='ogbn-arxiv')
-    split_idx = dataset.get_idx_split()
-
-    g, labels = dataset[0]
-    feats = g.ndata['feat']
-    g = dgl.to_bidirected(g).int()
-    # pad begin
-    feats_ = torch.zeros([feats.shape[0], closest_power_2(feats.shape[1])])
-    feats_[:, :feats.shape[1]] = feats
+    g, feats, labels, split_idx, num_classes = get_dataset(args.dataset)
+    # pad
+    feats_ = torch.zeros([feats.shape[0], nearest_power_2(feats.shape[1])])
+    feats_[:, : feats.shape[1]] = feats
     feats = feats_
-    # pad end
+    if args.dataset == 'ppi':
+        labels_ = torch.zeros([labels.shape[0], nearest_power_2(num_classes)]).to(labels)
+        labels_[:, :labels.shape[1]] = labels
+        labels = labels_
+    g = dgl.to_bidirected(g)
+    g = g.int().to(device)
     feats, labels = feats.to(device), labels.to(device)
-    train_idx = split_idx['train'].to(device)
-    dataset.num_classes = closest_power_2(dataset.num_classes)
- 
-    create_kernels(g, [feats.shape[-1], args.hidden_channels, dataset.num_classes], [1, 2, 4, 8, 16, 32], 1)
+    train_idx = split_idx["train"].to(device)
+    num_classes = nearest_power_2(num_classes)
 
-    model = GraphSAGE(in_feats=feats.size(-1),
-                      hidden_feats=args.hidden_channels,
-                      out_feats=dataset.num_classes,
-                      num_layers=args.num_layers,
-                      dropout=args.dropout).to(device)
+    create_kernels(
+        g,
+        [feats.shape[-1], args.hidden_channels, num_classes],
+        bucketing_config[args.dataset],
+        col_part[args.dataset],
+    )
 
-    evaluator = Evaluator(name='ogbn-arxiv')
-    logger = Logger(args.runs, args)
+    model = GraphSAGE(
+        in_feats=feats.size(-1),
+        hidden_feats=args.hidden_channels,
+        out_feats=num_classes,
+        num_layers=args.num_layers,
+        dropout=args.dropout,
+    ).to(device)
 
     dur = []
     for run in range(args.runs):
@@ -461,30 +492,11 @@ def main():
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
         for epoch in range(1, 1 + args.epochs):
             t0 = time.time()
-            loss = train(model, feats, labels, train_idx, optimizer)
+            loss = train(args.dataset, model, feats, labels, train_idx, optimizer)
             if epoch >= 3:
                 dur.append(time.time() - t0)
-                print('Training time/epoch {}'.format(np.mean(dur)))
-            if not args.eval:
-                continue
-
-            result = test(model, feats, labels, split_idx, evaluator)
-            logger.add_result(run, result)
-
-            if epoch % args.log_steps == 0:
-                train_acc, valid_acc, test_acc = result
-                print(f'Run: {run + 1:02d}, '
-                      f'Epoch: {epoch:02d}, '
-                      f'Loss: {loss:.4f}, '
-                      f'Train: {100 * train_acc:.2f}%, '
-                      f'Valid: {100 * valid_acc:.2f}% '
-                      f'Test: {100 * test_acc:.2f}%')
-
-        if args.eval:
-            logger.print_statistics(run)
-    if args.eval:
-        logger.print_statistics()
+                print("Training time/epoch {}".format(np.mean(dur)))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
