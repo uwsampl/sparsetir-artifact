@@ -6,7 +6,10 @@
 	url = https://github.com/dgSPARSE/dgSPARSE-Library.git
 [submodule "3rdparty/glog"]
 	path = 3rdparty/glog
-	url = git@github.com:google/glog.git
+	url = https://github.com/google/glog.git
 [submodule "3rdparty/cnpy"]
 	path = 3rdparty/cnpy
-	url = git@github.com:rogersce/cnpy.git
+	url = https://github.com/rogersce/cnpy.git
+[submodule "3rdparty/triton"]
+	path = 3rdparty/triton
+	url = https://github.com/MasterJH5574/triton.git
