@@ -56,8 +56,8 @@ def test_rgcn(g: DGLHeteroGraph, feat_size: int):
     indptr, indices, eid = g.adj_sparse(fmt="csc")
     etype = g.edata[dgl.ETYPE][eid]
 
-    cold_start = 3
-    total = 10
+    cold_start = 10
+    total = 100
     accum = 0
 
     # dgl-lowmem
@@ -66,7 +66,7 @@ def test_rgcn(g: DGLHeteroGraph, feat_size: int):
         us, vs = g.edges()
         feat_transformed = feat[us]
         msg = th.zeros(g.num_edges(), feat_size).to(0)
-        for epoch in range(10):
+        for epoch in range(total):
             with TorchOpTimer() as timer:
                 with th.no_grad():
                     for i in range(1, len(g.etype_pointer)):
@@ -91,7 +91,7 @@ def test_rgcn(g: DGLHeteroGraph, feat_size: int):
         linear_r = TypedLinear(feat_size, feat_size, len(g.etype_pointer)).to(0)
         us, vs = g.edges()
         feat_transformed = feat[us]
-        for epoch in range(10):
+        for epoch in range(total):
             with TorchOpTimer() as timer:
                 with th.no_grad():
                     msg = linear_r(feat_transformed, g.edata[dgl.ETYPE], True)
@@ -115,7 +115,7 @@ def test_rgcn(g: DGLHeteroGraph, feat_size: int):
 
     try:
         g.srcdata["feat"] = feat.unsqueeze(-1)
-        for epoch in range(10):
+        for epoch in range(total):
             with TorchOpTimer() as timer:
                 with th.no_grad():
                     g.update_all(msg_func, fn.sum("msg", "y"))
@@ -132,8 +132,8 @@ def test_rgcn(g: DGLHeteroGraph, feat_size: int):
 
 
 if __name__ == "__main__":
-    for feat_size in [4, 8, 16, 32, 64]:
-        for name in ["aifb", "mutag", "bgs", "am"]:
+    for feat_size in [16, 32]:#[4, 8, 16, 32, 64]:
+        for name in ['bgs']:#["aifb", "mutag", "bgs", "am"]:
             print("dataset {}, feat_size={}:".format(name, feat_size))
             dataset = get_dataset_by_name(name)
             g = dataset[0]
