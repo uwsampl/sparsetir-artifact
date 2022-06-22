@@ -437,6 +437,8 @@ bucketing_config = {
     "proteins": [1, 2, 4, 8, 16, 32, 64, 128, 256],
     "pubmed": [1, 2, 4, 8, 16, 32],
     "ppi": [1, 2, 4, 8, 16, 32],
+    "cora": [1, 2, 4],
+    "citeseer": [1, 2, 4],
     "reddit": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
 }
 
@@ -444,6 +446,8 @@ col_part = {
     "arxiv": 1,
     "proteins": 8,
     "pubmed": 1,
+    "cora": 1,
+    "citeseer": 1,
     "ppi": 8,
     "reddit": 8,
 }
