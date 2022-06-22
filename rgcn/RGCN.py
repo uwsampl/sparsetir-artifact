@@ -125,11 +125,11 @@ def profile(dataset, feat_dim, repeat=1000):
         del g, norm, net
     
     @empty_cache
-    def run_sparse_tir_hetero(g_hetero, features):
+    def run_sparse_tir_hetero(dataset, g_hetero, features):
         g_hetero = g_hetero.to(device)
         rel_names = list(set(g_hetero.etypes))
         net = RGCNSparseTIRHetero(
-            feat_dim, DEFAULT_DIM, feat_dim, len(g_hetero.etypes)).to(device)
+            dataset, feat_dim, DEFAULT_DIM, feat_dim, len(g_hetero.etypes)).to(device)
         net.eval()
         with torch.no_grad():
             bench(net=net, net_params=(
@@ -176,12 +176,12 @@ def profile(dataset, feat_dim, repeat=1000):
         del edge_type, u, v, adj, net_pyg_slice
 
     run_baseline_graphiler(g, features)
-    # run_dgl_bmm(g, features)
-    # run_dgl_hetero(g_hetero, features)
-    # run_pyg_bmm(g, features)
-    # run_pyg_slice(g, features)
-    # run_sparse_tir_homo(g, features)
-    # run_sparse_tir_hetero(g_hetero, features)
+    run_dgl_bmm(g, features)
+    run_dgl_hetero(g_hetero, features)
+    run_pyg_bmm(g, features)
+    run_pyg_slice(g, features)
+    run_sparse_tir_homo(g, features)
+    run_sparse_tir_hetero(dataset, g_hetero, features)
 
     return log
 

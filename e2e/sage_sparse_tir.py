@@ -95,9 +95,12 @@ class SpMM(torch.autograd.Function):
         dY_nd = tvm.nd.from_dlpack(th_to_dlpack(dY.view(-1).contiguous()))
         dX = torch.zeros_like(dY)
         dX_nd = tvm.nd.from_dlpack(th_to_dlpack(dX.view(-1).contiguous()))
-        f = kernels[(dY.shape[-1], False)]
+        # The graph we profiled are undirected.
+        # f = kernels[(dY.shape[-1], False)]
+        f = kernels[(dY.shape[-1], True)]
         args = [dY_nd, dX_nd]
-        args += kernel_args[False]
+        # args += kernel_args[False]
+        args += kernel_args[True]
         f(*args)
         return dX
 
@@ -195,7 +198,8 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
     print(feat_sizes)
     global kernels
     global kernel_args
-    for forward in [True, False]:
+    # The graph we profiled are undirected.
+    for forward in [True]: #[True, False]:
         mat = g.adj(transpose=forward, scipy_fmt="csr")
         buckets = bucket_sizes * column_part
         m = mat.shape[0]
@@ -417,10 +421,14 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
             kernels[(feat_size, forward)] = f
 
 
-def nearest_power_2(x: int):
-    ret = 1
-    while ret < x or ret < 32:
-        ret = ret * 2
+def pad_length(x: int):
+    if x <= 32:
+        return 32
+    if x <= 64:
+        return 64
+    ret = 128
+    while ret < x:
+        ret = ret + 128
     return ret
 
 
@@ -458,18 +466,18 @@ def main():
 
     g, feats, labels, split_idx, num_classes = get_dataset(args.dataset)
     # pad
-    feats_ = torch.zeros([feats.shape[0], nearest_power_2(feats.shape[1])])
+    feats_ = torch.zeros([feats.shape[0], pad_length(feats.shape[1])])
     feats_[:, : feats.shape[1]] = feats
     feats = feats_
     if args.dataset == 'ppi':
-        labels_ = torch.zeros([labels.shape[0], nearest_power_2(num_classes)]).to(labels)
+        labels_ = torch.zeros([labels.shape[0], pad_length(num_classes)]).to(labels)
         labels_[:, :labels.shape[1]] = labels
         labels = labels_
     g = dgl.to_bidirected(g)
     g = g.int().to(device)
     feats, labels = feats.to(device), labels.to(device)
     train_idx = split_idx["train"].to(device)
-    num_classes = nearest_power_2(num_classes)
+    num_classes = pad_length(num_classes)
 
     create_kernels(
         g,

@@ -135,13 +135,31 @@ def prepare_hetero_graph_simplified(g):
         "etype_edge_pointer": torch.IntTensor(etype_pointer),
     }
 
-def create_heterogeneneous_kernel(g, W, in_feat, out_feat):
+
+# V100
+config_dict = {
+    'aifb': (2, 32),
+    'mutag': (8, 256),
+    'bgs': (4, 256),
+    'biokg': (4, 512),
+    'am': (8, 512)
+}
+
+# GTX 3070
+# config_dict = {
+#     'aifb': (2, 32),
+#     'mutag': (4, 512),
+#     'bgs': (4, 256),
+#     'biokg': (4, 512), 
+#     'am': (4, 1024),
+# }
+
+def create_heterogeneneous_kernel(g, dataset, W, in_feat, out_feat):
     g = g.cpu()
     type_pointers = prepare_hetero_graph_simplified(g)
     g.ntype_pointer = type_pointers["ntype_node_pointer"]
     g.etype_pointer = type_pointers["etype_edge_pointer"]
-    bucket_size = 128
-    split_factor_f = 2
+    split_factor_f, bucket_size  = config_dict[dataset]
     N, R, GROUP, FEAT_IN, FEAT_OUT, NNZ_I, NNZ_J = rgcn_hetero_forward_2.params[-7:]
     n = g.num_nodes()
     r = len(g.etypes)
@@ -242,8 +260,9 @@ class RelGraphConvHomo(nn.Module):
 
 
 class RelGraphConvHetero(nn.Module):
-    def __init__(self, in_feat, out_feat, num_rels) -> None:
+    def __init__(self, dataset, in_feat, out_feat, num_rels) -> None:
         super().__init__()
+        self.dataset = dataset
         self.in_feat = in_feat
         self.out_feat = out_feat
         dropout = 0.
@@ -254,7 +273,7 @@ class RelGraphConvHetero(nn.Module):
 
     def forward(self, g, feat):
         if self.cached_kernel is None:
-            self.cached_kernel = create_heterogeneneous_kernel(g, self.W.data, self.in_feat, self.out_feat)
+            self.cached_kernel = create_heterogeneneous_kernel(g, self.dataset, self.W.data, self.in_feat, self.out_feat)
         h = self.cached_kernel(feat)
         return h
 
@@ -272,10 +291,10 @@ class RGCNSparseTIRHomo(nn.Module):
 
 
 class RGCNSparseTIRHetero(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim, num_rels):
+    def __init__(self, dataset, in_dim, hidden_dim, out_dim, num_rels):
         super(RGCNSparseTIRHetero, self).__init__()
-        self.layer1 = RelGraphConvHetero(in_dim, hidden_dim, num_rels)
-        self.layer2 = RelGraphConvHetero(hidden_dim, out_dim, num_rels)
+        self.layer1 = RelGraphConvHetero(dataset, in_dim, hidden_dim, num_rels)
+        self.layer2 = RelGraphConvHetero(dataset, hidden_dim, out_dim, num_rels)
 
     def forward(self, g, features):
         x = F.relu(self.layer1(g, features))
