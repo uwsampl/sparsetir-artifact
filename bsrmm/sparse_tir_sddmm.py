@@ -302,7 +302,7 @@ WMMA_STORE = tir.TensorIntrin.register(
 block_size = 16
 nb = 256
 mb = 256
-feat_size = 64
+feat_size = 768
 n = nb * block_size
 m = mb * block_size
 
@@ -314,7 +314,7 @@ np.random.seed(0)
 data = np.random.rand(nnzb, block_size, block_size)
 A = np.random.rand(m, feat_size).astype("float16")
 B = np.random.rand(n, feat_size).astype("float16")
-C = np.matmul(A, B.T).astype("float16")
+# C = np.matmul(A, B.T).astype("float16")
 
 v_nb, v_mb, v_nnzb, v_blk, v_feat_size = bsrsddmm.params[-5:]
 bsrmm = bsrsddmm.specialize(
@@ -361,7 +361,6 @@ sch.decompose_reduction(new_blk, fo)
 A_local = sch.cache_read(blk, 1, "wmma.matrix_a")
 B_local = sch.cache_read(blk, 3, "wmma.matrix_b")
 sch.hide_buffer_access(blk, "read", [2, 4])
-# sch.tensorize(sch.get_loops(blk)[-3], "wmma_sync")
 sch.tensorize(sch.get_loops(A_local)[-2], "wmma_load_a")
 sch.tensorize(sch.get_loops(B_local)[-2], "wmma_load_b")
 sch.tensorize(sch.get_loops(C_local)[-2], "wmma_store")
@@ -371,6 +370,7 @@ sch.tensorize(ax0, "wmma_sync")
 sch.tensorize(sch.get_loops(sch.get_block("sddmm0_init"))[-2], "wmma_fill")
 mod = lower_sparse_buffer(sch.mod)
 f = tvm.build(mod["main"], target="cuda")
+# print(f.imported_modules[0].get_source())
 
 ctx = tvm.cuda(0)
 C_indptr = tvm.nd.array(np.copy(indptr).astype("int32"), device=ctx)

@@ -72,8 +72,7 @@ def test_matmul(MODE, TRANS_A, TRANS_B, BLOCK, DTYPE, Z=1, H=1, M=512, N=384, K=
 
 
 if __name__ == "__main__":
-    for block in [16, 32, 64]:
-        test_matmul("sdd", False, True, block, torch.float16, Z=1, H=1, M=4096, N=4096, K=4096)
+    test_matmul("sdd", False, True, 16, torch.float16, Z=1, H=1, M=4096, N=4096, K=768)
 
 
 

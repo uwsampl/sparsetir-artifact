@@ -54,9 +54,6 @@ def test_matmul(MODE, TRANS_A, TRANS_B, BLOCK, DTYPE, Z=1, H=1, M=512, N=384, K=
     c_tri = triton.testing.catch_oor(lambda: op(a_tri, b_tri), pytest)
     # compare
     triton.testing.assert_almost_equal(c_ref, c_tri)
-    print(c_ref.shape)
-    print(a_ref.shape)
-    print(b_ref.shape)
 
     print("triton-block-spmm\tM\t{}\tN\t{}\tK\t{}\tblock\t{}\tdtype\t{}\ttrans_A\t{}\ttrans_B\t{}".format(M, N, K, BLOCK, DTYPE, TRANS_A, TRANS_B))
 
@@ -68,12 +65,4 @@ def test_matmul(MODE, TRANS_A, TRANS_B, BLOCK, DTYPE, Z=1, H=1, M=512, N=384, K=
 
 
 if __name__ == "__main__":
-    # for block in [16, 32, 64]:
-    #     for dtype in [torch.float32, torch.float16]:
-    #         for trans_A in [False, True]:
-    #             for trans_B in [False, True]:
-    for block in [16, 32, 64]:
-        test_matmul("dsd", False, False, block, torch.float32, Z=1, H=1, M=4096, N=1024, K=4096)
-
-
-
+    test_matmul("dsd", False, False, 16, torch.float16, Z=1, H=1, M=4096, N=768, K=4096)

@@ -305,7 +305,7 @@ WMMA_STORE = tir.TensorIntrin.register(
 block_size = 16
 nb = 256
 mb = 256
-feat_size = 64
+feat_size = 768
 n = nb * block_size
 m = mb * block_size
 

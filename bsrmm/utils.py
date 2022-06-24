@@ -4,31 +4,43 @@ import matplotlib
 from matplotlib import pyplot as plt
 from scipy.sparse import coo_matrix
 
-def create_pixelfly(h, m, fmt='mask'):
-    stride = m // 2
+
+def create_pixelfly(h, mb, fmt="mask", block_size=1):
+    stride = mb // 2
     rows = []
-    cols =[]
+    cols = []
     while stride >= 1:
-        for blk_id in range(m // stride // 2):
-            for i in range(stride * 2):
+        for blk_id in range(mb // stride // 2):
+            for i in range(2):
                 for j in range(2):
-                    rows.append(blk_id * (stride * 2) + i)
-                    cols.append(blk_id * (stride * 2) + i % stride + j * stride)
+                    for k in range(stride):
+                        rows.append(blk_id * (stride * 2) + i * stride + k)
+                        cols.append(blk_id * (stride * 2) + j * stride + k)
         stride >>= 1
     rows = torch.tensor(rows)
     cols = torch.tensor(cols)
- 
-    if fmt == 'mask':
-        mask = torch.zeros(h, m, m, dtype=torch.int32)
+
+    if fmt == "mask":
+        mask = torch.zeros(h, mb, mb, dtype=torch.int32)
         mask[:, rows, cols] = 1
         return mask
-    elif fmt == 'csr':
+    elif fmt == "bsr":
         rows = rows.numpy()
         cols = cols.numpy()
-        coo = coo_matrix((np.ones_like(rows), (rows, cols)), shape=(m, m))
-        csr = coo.tocsr() 
-        plt.spy(csr)
-        plt.savefig("1.pdf")
+        coo = coo_matrix((np.ones_like(rows), (rows, cols)), shape=(mb, mb))
+        csr = coo.tocsr()
+        return csr
+    elif fmt == "csr":
+        rows = rows.view(-1, 1, 1) * block_size + torch.arange(block_size, dtype=torch.int32).view(1, block_size, 1) + torch.zeros(1, 1, block_size, dtype=torch.int32)
+        cols = cols.view(-1, 1, 1) * block_size + torch.zeros(1, block_size, 1, dtype=torch.int32) + torch.arange(block_size, dtype=torch.int32).view(1, 1, block_size)
+        rows = rows.view(-1).numpy()
+        cols = cols.view(-1).numpy()
+        coo = coo_matrix((np.ones_like(rows), (rows, cols)), shape=(mb * block_size, mb * block_size))
+        csr = coo.tocsr()
         return csr
     else:
         raise KeyError("Format {} not recognized.".format(fmt))
+
+
+if __name__ == "__main__":
+    create_pixelfly(1, 256, "csr")

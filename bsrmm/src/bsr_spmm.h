@@ -59,12 +59,9 @@ template <typename IdType, typename DType>
 void SpMMCsr(IdType m, IdType n, IdType k, IdType nnz, IdType* indptr, IdType* indices, DType* x,
              DType* weight, DType* out) {
   DType alpha = 1., beta = 0.;
-  auto thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
-  if (!thr_entry->cusparse_handle) {
-    CUSPARSE_CALL(cusparseCreate(&(thr_entry->cusparse_handle)));
-  }
-  auto handle = thr_entry->cusparse_handle;
-  CUSPARSE_CALL(cusparseSetStream(handle, thr_entry->stream));
+  cusparseHandle_t handle;
+  CUSPARSE_CALL(cusparseCreate(&handle));
+
   cusparseSpMatDescr_t matA;
   cusparseDnMatDescr_t matB, matC;
 
@@ -90,6 +87,7 @@ void SpMMCsr(IdType m, IdType n, IdType k, IdType nnz, IdType* indptr, IdType* i
   CUSPARSE_CALL(cusparseDestroyDnMat(matC));
   CUSPARSE_CALL(cusparseDestroyDnMat(matB));
   CUSPARSE_CALL(cusparseDestroySpMat(matA));
+  CUSPARSE_CALL(cusparseDestroy(handle));
 }
 
 /*
@@ -107,12 +105,8 @@ template <typename IdType, typename DType>
 void SpMMBsr(IdType mb, IdType n, IdType kb, IdType nnzb, IdType block_size, IdType* indptr,
              IdType* indices, DType* x, DType* weight, DType* out) {
   DType alpha = 1., beta = 0.;
-  auto thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
-  if (!thr_entry->cusparse_handle) {
-    CUSPARSE_CALL(cusparseCreate(&(thr_entry->cusparse_handle)));
-  }
-  auto handle = thr_entry->cusparse_handle;
-  CUSPARSE_CALL(cusparseSetStream(handle, thr_entry->stream));
+  cusparseHandle_t handle;
+  CUSPARSE_CALL(cusparseCreate(&handle));
 
   // create matrix descriptor for sparse matrix.
   cusparseMatDescr_t descrA = 0;
@@ -125,12 +119,12 @@ void SpMMBsr(IdType mb, IdType n, IdType kb, IdType nnzb, IdType block_size, IdT
   // matrix B: k * n, matrix C: m * n
   const IdType ldb = n;
   const IdType ldc = n;
-
   CUSPARSE_CALL(bsrmm<DType>(handle, CUSPARSE_DIRECTION_ROW, CUSPARSE_OPERATION_NON_TRANSPOSE,
                              CUSPARSE_OPERATION_NON_TRANSPOSE, mb, n, kb, nnzb, &alpha, descrA,
                              weight, indptr, indices, block_size, x, ldb, &beta, out, ldc));
 
   CUSPARSE_CALL(cusparseDestroyMatDescr(descrA));
+  CUSPARSE_CALL(cusparseDestroy(handle));
 }
 
 /*
@@ -152,12 +146,9 @@ void SpMMEll(IdType rows, IdType n, IdType cols, IdType block_size, IdType ell_c
   // TODO(zihao): fix
 
   DType alpha = 1., beta = 0.;
-  auto thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
-  if (!thr_entry->cusparse_handle) {
-    CUSPARSE_CALL(cusparseCreate(&(thr_entry->cusparse_handle)));
-  }
-  auto handle = thr_entry->cusparse_handle;
-  CUSPARSE_CALL(cusparseSetStream(handle, thr_entry->stream));
+  cusparseHandle_t handle;
+  CUSPARSE_CALL(cusparseCreate(&handle));
+
   cusparseSpMatDescr_t matA;
   cusparseDnMatDescr_t matB, matC;
 
@@ -184,6 +175,7 @@ void SpMMEll(IdType rows, IdType n, IdType cols, IdType block_size, IdType ell_c
   CUSPARSE_CALL(cusparseDestroyDnMat(matC));
   CUSPARSE_CALL(cusparseDestroyDnMat(matB));
   CUSPARSE_CALL(cusparseDestroySpMat(matA));
+  CUSPARSE_CALL(cusparseDestroy(handle));
 }
 
 }  // namespace blocksparse
