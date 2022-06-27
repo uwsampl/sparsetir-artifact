@@ -65,4 +65,4 @@ def test_matmul(MODE, TRANS_A, TRANS_B, BLOCK, DTYPE, Z=1, H=1, M=512, N=384, K=
 
 
 if __name__ == "__main__":
-    test_matmul("dsd", False, False, 16, torch.float16, Z=1, H=1, M=4096, N=768, K=4096)
+    test_matmul("dsd", False, False, 16, torch.float16, Z=1, H=1, M=4096, N=64, K=4096)
