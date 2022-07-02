@@ -3,7 +3,7 @@ import torch
 
 import triton
 from torch.profiler import profile, ProfilerActivity, schedule 
-from utils import create_pixelfly
+from utils import create_pixelfly, create_longformer
 
 
 class TorchOpTimer(object):
@@ -36,7 +36,8 @@ def test_matmul(MODE, TRANS_A, TRANS_B, BLOCK, DTYPE, Z=1, H=1, M=512, N=384, K=
         "dsd": (a_shape[2], a_shape[3]),
         "dds": (b_shape[2], b_shape[3]),
     }[MODE]
-    layout = create_pixelfly(H, shape[0] // BLOCK, fmt='mask')
+    #layout = create_pixelfly(H, shape[0] // BLOCK, fmt='mask')
+    layout = create_longformer(H, shape[0] // BLOCK, 256 // BLOCK, fmt='mask')
 
     # create data
     a_ref, a_tri = triton.testing.make_pair(a_shape, dtype=DTYPE, alpha=.1)
@@ -65,4 +66,4 @@ def test_matmul(MODE, TRANS_A, TRANS_B, BLOCK, DTYPE, Z=1, H=1, M=512, N=384, K=
 
 
 if __name__ == "__main__":
-    test_matmul("dsd", False, False, 16, torch.float16, Z=1, H=1, M=4096, N=64, K=4096)
+    test_matmul("dsd", False, False, 16, torch.float16, Z=1, H=12, M=4096, N=64, K=4096)

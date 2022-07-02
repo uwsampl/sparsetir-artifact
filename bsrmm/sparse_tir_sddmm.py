@@ -6,7 +6,7 @@ from tvm.ir import IRModule
 from tvm.sparse import lower_sparse_iter, lower_sparse_buffer
 import numpy as np
 import scipy.sparse as sp
-from utils import create_pixelfly
+from utils import create_pixelfly, create_longformer
 
 
 @T.prim_func
@@ -21,6 +21,7 @@ def bsrsddmm(
     nnzb: T.int32,
     blk: T.int32,
     feat_size: T.int32,
+    num_heads: T.int32,
 ) -> None:
     T.func_attr({"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2})
     I = T.dense_fixed(nb)
@@ -28,12 +29,14 @@ def bsrsddmm(
     J_detach = T.dense_fixed(mb)
     BI = T.dense_fixed(blk)
     BJ = T.dense_fixed(blk)
+    H = T.dense_fixed(num_heads)
     F = T.dense_fixed(feat_size)
-    A = T.match_sparse_buffer(a, (I, BI, F), "float16")
-    B = T.match_sparse_buffer(b, (J_detach, F, BJ), "float16")
-    C = T.match_sparse_buffer(c, (I, J, BI, BJ), "float16")
+    A = T.match_sparse_buffer(a, (H, I, BI, F), "float16")
+    B = T.match_sparse_buffer(b, (H, J_detach, F, BJ), "float16")
+    C = T.match_sparse_buffer(c, (H, I, J, BI, BJ), "float16")
 
-    with T.iter([I, J, BI, BJ, F], "SSSSR", "sddmm") as [
+    with T.iter([H, I, J, BI, BJ, F], "SSSSSR", "sddmm") as [
+        h,
         i,
         j,
         bi,
@@ -41,8 +44,8 @@ def bsrsddmm(
         f,
     ]:
         with T.init():
-            C[i, j, bi, bj] = T.float16(0)
-        C[i, j, bi, bj] = C[i, j, bi, bj] + A[i, bi, f] * B[j, f, bj]
+            C[h, i, j, bi, bj] = T.float16(0)
+        C[h, i, j, bi, bj] = C[h, i, j, bi, bj] + A[h, i, bi, f] * B[h, j, f, bj]
 
 
 @T.prim_func
@@ -302,27 +305,30 @@ WMMA_STORE = tir.TensorIntrin.register(
 block_size = 16
 nb = 256
 mb = 256
-feat_size = 768
+feat_size = 64
+num_heads = 12
 n = nb * block_size
 m = mb * block_size
 
-C_block = create_pixelfly(1, mb, fmt="csr")
+#C_block = create_pixelfly(1, mb, fmt="bsr")
+C_block = create_longformer(1, mb, 256 // block_size, fmt='bsr')
+
 indptr = C_block.indptr
 indices = C_block.indices
 nnzb = C_block.nnz
 np.random.seed(0)
-data = np.random.rand(nnzb, block_size, block_size)
-A = np.random.rand(m, feat_size).astype("float16")
-B = np.random.rand(n, feat_size).astype("float16")
+data = np.random.rand(num_heads, nnzb, block_size, block_size)
+A = np.random.rand(num_heads, m, feat_size).astype("float16")
+B = np.random.rand(num_heads, n, feat_size).astype("float16")
 # C = np.matmul(A, B.T).astype("float16")
 
-v_nb, v_mb, v_nnzb, v_blk, v_feat_size = bsrsddmm.params[-5:]
+v_nb, v_mb, v_nnzb, v_blk, v_feat_size, v_num_heads = bsrsddmm.params[-6:]
 bsrmm = bsrsddmm.specialize(
-    {v_nb: nb, v_mb: mb, v_nnzb: nnzb, v_blk: block_size, v_feat_size: feat_size}
+    {v_nb: nb, v_mb: mb, v_nnzb: nnzb, v_blk: block_size, v_feat_size: feat_size, v_num_heads: num_heads}
 )
 sch = tvm.tir.Schedule(bsrmm)
 sp_iteration = sch.get_sparse_iteration("sddmm")
-i, j, bi, bj, f = sch.get_sp_iters(sp_iteration)
+h, i, j, bi, bj, f = sch.get_sp_iters(sp_iteration)
 sch.sparse_fuse(sp_iteration, [i, j])
 mod = lower_sparse_iter(sch.mod)
 
@@ -333,7 +339,7 @@ mod_sddmm = tvm.tir.transform.RemovePreprocess()(mod)
 # schedule preprocess
 sch = tir.Schedule(mod_preprocess)
 blk = sch.get_block("binary_search_block_0_0")
-(i,) = sch.get_loops(blk)
+i, = sch.get_loops(blk)
 io, ii = sch.split(i, [None, 32])
 sch.bind(ii, "threadIdx.x")
 sch.bind(io, "blockIdx.x")
@@ -350,12 +356,15 @@ preproc(indptr_nd, mid_nd)
 # schedule sddmm
 sch = tir.Schedule(mod_sddmm)
 blk = sch.get_block("sddmm0")
-j, bi, bj, f = sch.get_loops(blk)
+h, j, bi, bj, f = sch.get_loops(blk)
 fo, fi = sch.split(f, [None, 16])
+sch.bind(h, "blockIdx.y")
 sch.reorder(j, fo, bi, fi, bj)
-sch.bind(j, "blockIdx.x")
+jo, ji = sch.split(j, [None, 4])
+sch.bind(jo, "blockIdx.x")
+sch.bind(ji, "threadIdx.y")
 C_local = sch.cache_write(blk, 0, "wmma.accumulator")
-sch.reverse_compute_at(C_local, j)
+sch.reverse_compute_at(C_local, ji)
 new_blk = sch.blockize(bi)
 sch.decompose_reduction(new_blk, fo)
 A_local = sch.cache_read(blk, 1, "wmma.matrix_a")
@@ -377,7 +386,7 @@ C_indptr = tvm.nd.array(np.copy(indptr).astype("int32"), device=ctx)
 C_indices = tvm.nd.array(np.copy(indices).astype("int32"), device=ctx)
 A_nd = tvm.nd.array(np.copy(A.reshape(-1)).astype("float16"), device=ctx)
 B_nd = tvm.nd.array(np.copy(B.reshape(-1)).astype("float16"), device=ctx)
-C_nd = tvm.nd.array(np.zeros((nnzb * block_size * block_size,), dtype="float16"), device=ctx)
+C_nd = tvm.nd.array(np.zeros((num_heads * nnzb * block_size * block_size,), dtype="float16"), device=ctx)
 args = [A_nd, B_nd, C_nd, C_indptr, C_indices, mid_nd]
 f(*args)
 # tvm.testing.assert_allclose(
