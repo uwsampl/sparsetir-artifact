@@ -12,20 +12,7 @@ import tvm.testing
 import tvm.tir as tir
 from tvm.script import tir as T
 from tvm.sparse import lower_sparse_buffer, lower_sparse_iter
-
-
-class TorchOpTimer(object):
-
-    def __enter__(self):
-        self.start_event = th.cuda.Event(enable_timing=True)
-        self.end_event = th.cuda.Event(enable_timing=True)
-        self.start_event.record()
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.end_event.record()
-        th.cuda.synchronize()  # Wait for the events to be recorded!
-        self.time = self.start_event.elapsed_time(self.end_event)
+import torch.utils.benchmark as benchmark
 
 
 @T.prim_func
@@ -697,7 +684,8 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
     nb = (n + group_size - 1) // group_size
     group_indptr, tile_indices, mask = condense(indptr_nd, indices_nd,
                                                 tile_size, group_size)
-    print("Con-dense density: {}".format(np.prod(mask.numpy().shape) / (m * n)))
+    print("Con-dense density: {}".format(
+        np.prod(mask.numpy().shape) / (m * n)))
     del indptr_nd, indices_nd
     nnzb = mask.shape[0]
     feat_size = x.shape[1]
@@ -778,37 +766,43 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
     print("tc-spmm time: \t{:.5f}ms".format(evaluator(*args).mean * 1000))
 
 
+def matmul(a, b):
+    return a @ b
+
+
 def bench_cublas(W: th.Tensor, X: th.Tensor):
     with th.no_grad():
         W = W.half().to(0)
         X = X.to(0)
-        cold_start = 10
-        total = 100
-        accum_time = 0
-        for cnt in range(total):
-            with TorchOpTimer() as timer:
-                Y = W @ X
-            if cnt >= cold_start:
-                accum_time += timer.time
+        timer = benchmark.Timer(stmt="matmul(a, b)",
+                                setup="from __main__ import matmul",
+                                globals={
+                                    'a': W,
+                                    'b': X
+                                })
+        measure = timer.timeit(100)
 
-        print("cublas time: \t{:.5f}ms".format(accum_time / (total - cold_start)))
+        print("cublas time: \t{:.5f}ms".format(measure.mean * 1000))
 
 
 def bench_cusparse(csr: Any, X: th.Tensor):
-    W = th.sparse_csr_tensor(csr.indptr, csr.indices, csr.data, size=csr.shape, dtype=th.float16).to(0)
+    W = th.sparse_csr_tensor(csr.indptr,
+                             csr.indices,
+                             csr.data,
+                             size=csr.shape,
+                             dtype=th.float16).to(0)
     with th.no_grad():
         W = W.half().to(0)
         X = X.to(0)
-        cold_start = 10
-        total = 100
-        accum_time = 0
-        for cnt in range(total):
-            with TorchOpTimer() as timer:
-                Y = W @ X
-            if cnt >= cold_start:
-                accum_time += timer.time
+        timer = benchmark.Timer(stmt="matmul(a, b)",
+                                setup="from __main__ import matmul",
+                                globals={
+                                    'a': W,
+                                    'b': X
+                                })
+        measure = timer.timeit(100)
 
-    print("cusparse time: \t{:.5f}ms".format(accum_time / (total - cold_start)))
+        print("cusparse time: \t{:.5f}ms".format(measure.mean * 1000))
 
 
 if __name__ == "__main__":
@@ -832,6 +826,16 @@ if __name__ == "__main__":
     # print(tokenizer.decode(predict_answer_tokens))
 
     # W * X: W: (64, 32) X: (32, 128)
+    nnz_params = 0
+    ttl_params = 0
+    for name, param in model.named_parameters():
+        if name.endswith("dense.weight") or name.endswith(
+                "key.weight") or name.endswith(
+                    "value.weight") or name.endswith("query.weight"):
+            ttl_params += param.numel()
+            nnz_params += len(param.nonzero())
+
+    print(nnz_params / ttl_params)
 
     for name, param in model.named_parameters():
         if name.endswith("dense.weight") or name.endswith(
