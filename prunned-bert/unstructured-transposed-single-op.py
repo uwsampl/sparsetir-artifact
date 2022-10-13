@@ -1,10 +1,10 @@
 from typing import Any
-from tvm.relay import data_dep_optimization as ddo
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 from transformers import BertModel
 from scipy import sparse as sp
 import numpy as np
 import torch as th
+import pandas as pd
 import dgl
 import tvm
 from tvm.sparse.format import condense
@@ -643,21 +643,23 @@ def tcspmm(
     T.func_attr({
         "global_symbol": "main",
         "tir.noalias": True,
-        "sparse_tir_level": 2
+        "sparse_tir_level": 2,
     })
     IO = T.dense_fixed(mb)
     JO = T.dense_variable(IO, (nb, nnzb), indptr, "int32")
     II = T.dense_fixed(tile_size)
     JI = T.sparse_fixed(JO, (nb * group_size, group_size), indices, "int32")
+    I = T.dense_fixed(mb * tile_size)
     J = T.dense_fixed(nb * group_size)
     F = T.dense_fixed(feat_size)
     A = T.match_sparse_buffer(a, [IO, JO, II, JI], "float16")
     B = T.match_sparse_buffer(b, [J, F], "float16")
-    C = T.match_sparse_buffer(c, [IO, II, F], "float16")
+    C = T.match_sparse_buffer(c, [I, F], "float16")
+
     with T.iter([IO, JO, II, JI, F], "SRSRS", "tcspmm") as [io, jo, ii, ji, f]:
         with T.init():
-            C[io, ii, f] = T.float16(0)
-        C[io, ii, f] = C[io, ii, f] + A[io, jo, ii, ji] * B[ji, f]
+            C[io * tile_size + ii, f] = T.float16(0)
+        C[io * tile_size + ii, f] = C[io * tile_size + ii, f] + A[io, jo, ii, ji] * B[ji, f]
 
 
 def parse_mma_shape(mma_shape_str: str):
@@ -682,8 +684,8 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
     nnz = sp_mat.nnz
     mb = (m + tile_size - 1) // tile_size
     nb = (n + group_size - 1) // group_size
-    group_indptr, tile_indices, mask = condense(indptr_nd, indices_nd,
-                                                tile_size, group_size)
+    group_indptr, tile_indices, mask, _, _, _ = condense(indptr_nd, indices_nd,
+                                                tile_size, group_size, threshold=1)
     print("Con-dense density: {}".format(
         np.prod(mask.numpy().shape) / (m * n)))
     del indptr_nd, indices_nd
@@ -704,7 +706,7 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
             NNZB: nnzb,
             F: feat_size,
             T: tile_size,
-            G: group_size
+            G: group_size,
         }))
     mod = lower_sparse_iter(mod)
     sch = tir.Schedule(mod)
@@ -713,7 +715,7 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
     (i, ) = sch.get_loops(blk_outer)
     sch.bind(i, "blockIdx.x")
     jo, ii, ji, f = sch.get_loops(blk_inner)
-    foo, foi, fi = sch.split(f, [None, min(2, feat_size // mma_n), mma_n])
+    foo, foi, fi = sch.split(f, [None, min(1, feat_size // mma_n), mma_n])
     sch.bind(foo, "blockIdx.y")
     # sch.unroll(foi)
     sch.reorder(foo, foi, jo, ii, ji, fi)
@@ -749,6 +751,7 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
     mod = lower_sparse_buffer(sch.mod)
     f = tvm.build(mod, target="cuda")
     # print(f.imported_modules[0].get_source())
+    # assert False
 
     # prepare input
     dev = tvm.cuda(0)
@@ -763,7 +766,9 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
     # f(*args)
 
     evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
-    print("tc-spmm time: \t{:.5f}ms".format(evaluator(*args).mean * 1000))
+    avg_time = evaluator(*args).mean
+    print("tc-spmm time: \t{:.5f}ms".format(avg_time * 1000))
+    return avg_time
 
 
 def matmul(a, b):
@@ -783,6 +788,7 @@ def bench_cublas(W: th.Tensor, X: th.Tensor):
         measure = timer.timeit(100)
 
         print("cublas time: \t{:.5f}ms".format(measure.mean * 1000))
+        return measure.mean
 
 
 def bench_cusparse(csr: Any, X: th.Tensor):
@@ -803,6 +809,7 @@ def bench_cusparse(csr: Any, X: th.Tensor):
         measure = timer.timeit(100)
 
         print("cusparse time: \t{:.5f}ms".format(measure.mean * 1000))
+        return measure.mean
 
 
 if __name__ == "__main__":
@@ -837,13 +844,24 @@ if __name__ == "__main__":
 
     print(nnz_params / ttl_params)
 
+    sparsetir_durs = []
+    cublas_durs = []
+    cusparse_durs = []
+    densities = []
     for name, param in model.named_parameters():
         if name.endswith("dense.weight") or name.endswith(
                 "key.weight") or name.endswith(
                     "value.weight") or name.endswith("query.weight"):
             csr_weight = sp.csr_matrix(param.detach().numpy())
             print("Density: {:.5f}".format(csr_weight.nnz / param.numel()))
+            densities.append(csr_weight.nnz / param.numel())
+            print(param.shape)
             x = th.rand(csr_weight.shape[1], 128).half()
-            bench_tc_spmm(csr_weight, x, "m8n32k16")
-            bench_cublas(param.data, x)
-            bench_cusparse(csr_weight, x)
+            sparsetir_durs.append(bench_tc_spmm(csr_weight, x, "m8n32k16"))
+            cublas_durs.append(bench_cublas(param.data, x))
+            cusparse_durs.append(bench_cusparse(csr_weight, x))
+    
+
+    print(sum(sparsetir_durs), sum(cublas_durs), sum(cusparse_durs))
+    # pd = pd.DataFrame(data={"density": densities, "sparsetir_dur": sparsetir_durs, "cublas_dur": cublas_durs, "cusparse_dur": cusparse_durs})
+    # pd.to_csv("single_op.csv", index=False)
