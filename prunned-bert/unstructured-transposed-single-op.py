@@ -5,6 +5,7 @@ from scipy import sparse as sp
 import numpy as np
 import torch as th
 import pandas as pd
+import argparse
 import dgl
 import tvm
 from tvm.sparse.format import condense
@@ -659,7 +660,8 @@ def tcspmm(
     with T.iter([IO, JO, II, JI, F], "SRSRS", "tcspmm") as [io, jo, ii, ji, f]:
         with T.init():
             C[io * tile_size + ii, f] = T.float16(0)
-        C[io * tile_size + ii, f] = C[io * tile_size + ii, f] + A[io, jo, ii, ji] * B[ji, f]
+        C[io * tile_size + ii,
+          f] = C[io * tile_size + ii, f] + A[io, jo, ii, ji] * B[ji, f]
 
 
 def parse_mma_shape(mma_shape_str: str):
@@ -684,8 +686,11 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
     nnz = sp_mat.nnz
     mb = (m + tile_size - 1) // tile_size
     nb = (n + group_size - 1) // group_size
-    group_indptr, tile_indices, mask, _, _, _ = condense(indptr_nd, indices_nd,
-                                                tile_size, group_size, threshold=1)
+    group_indptr, tile_indices, mask, _, _, _ = condense(indptr_nd,
+                                                         indices_nd,
+                                                         tile_size,
+                                                         group_size,
+                                                         threshold=1)
     print("Con-dense density: {}".format(
         np.prod(mask.numpy().shape) / (m * n)))
     del indptr_nd, indices_nd
@@ -813,6 +818,18 @@ def bench_cusparse(csr: Any, X: th.Tensor):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser("structured prunned bert")
+    parser.add_argument("--dim",
+                        "-d",
+                        type=int,
+                        default=128,
+                        help="feature size")
+    parser.add_argument("--csv",
+                        "-c",
+                        action="store_true",
+                        help="whether to dump csv file or not")
+    args = parser.parse_args()
+
     tokenizer = AutoTokenizer.from_pretrained(
         "huggingface/prunebert-base-uncased-6-finepruned-w-distil-squad")
 
@@ -856,12 +873,18 @@ if __name__ == "__main__":
             print("Density: {:.5f}".format(csr_weight.nnz / param.numel()))
             densities.append(csr_weight.nnz / param.numel())
             print(param.shape)
-            x = th.rand(csr_weight.shape[1], 128).half()
+            x = th.rand(csr_weight.shape[1], args.dim).half()
             sparsetir_durs.append(bench_tc_spmm(csr_weight, x, "m8n32k16"))
             cublas_durs.append(bench_cublas(param.data, x))
             cusparse_durs.append(bench_cusparse(csr_weight, x))
-    
 
     print(sum(sparsetir_durs), sum(cublas_durs), sum(cusparse_durs))
-    # pd = pd.DataFrame(data={"density": densities, "sparsetir_dur": sparsetir_durs, "cublas_dur": cublas_durs, "cusparse_dur": cusparse_durs})
-    # pd.to_csv("single_op.csv", index=False)
+    if args.csv:
+        pd = pd.DataFrame(
+            data={
+                "density": densities,
+                "sparsetir_dur": sparsetir_durs,
+                "cublas_dur": cublas_durs,
+                "cusparse_dur": cusparse_durs
+            })
+        pd.to_csv("single_op.csv", index=False)
