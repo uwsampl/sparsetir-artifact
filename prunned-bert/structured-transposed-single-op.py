@@ -12,7 +12,7 @@ import tvm.testing
 import tvm.tir as tir
 from tvm.script import tir as T
 from tvm.sparse import lower_sparse_buffer, lower_sparse_iter
-import torch.utils.benchmark as benchmark
+from torch.profiler import profile, ProfilerActivity, schedule
 
 
 @T.prim_func
@@ -389,20 +389,16 @@ def bench_bsrmm(bsr_mat: Any, x: th.Tensor):
     j, bi, f, bj = sch.get_loops(blk_inner)
     bio, bii = sch.split(bi, [2, 16])
     bjo, bji = sch.split(bj, [2, 16])
-    foo, foi, fi = sch.split(f, [None, 2, 16])
-    sch.reorder(foo, j, bio, bjo, foi, bii, fi, bji)
+    fo, fi = sch.split(f, [None, 16])
+    sch.reorder(fo, j, bio, bjo, bii, fi, bji)
     sch.lift_loop(bio)
     new_blk = sch.blockize(bii)
     (i, bio) = sch.get_loops(blk_outer)
-    io, ii = sch.split(i, [None, 8])
-    sch.reorder(io, bio, ii)
-    fused_i = sch.fuse(io, bio)
-    sch.bind(fused_i, "blockIdx.x")
-    sch.bind(ii, "threadIdx.y")
-    sch.bind(foo, "blockIdx.y")
-    sch.unroll(foi)
+    i = sch.fuse(i, bio)
+    sch.bind(i, "blockIdx.x")
+    sch.bind(fo, "blockIdx.y")
     C_local = sch.cache_write(new_blk, 0, "wmma.accumulator")
-    sch.reverse_compute_at(C_local, foi, True)
+    sch.reverse_compute_at(C_local, fo, True)
     sch.decompose_reduction(new_blk, j)
     A_local = sch.cache_read(blk_inner, 1, "wmma.matrix_a")
     B_local = sch.cache_read(blk_inner, 2, "wmma.matrix_b")
@@ -432,18 +428,22 @@ def bench_bsrmm(bsr_mat: Any, x: th.Tensor):
     evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
     avg_time = evaluator(*args).mean
     print("bsrmm time: \t{:.5f}ms".format(avg_time * 1000))
-    return avg_time
+    return avg_time * 1000
 
 
 def bench_cublas(W: th.Tensor, X: th.Tensor):
     with th.no_grad():
         W = W.half().to(0)
         X = X.to(0)
-        timer = benchmark.Timer(stmt="a @ b", globals={'a': W, 'b': X})
-        measure = timer.timeit(100)
+        with profile(activities=[ProfilerActivity.CUDA],
+                     schedule=schedule(wait=0, warmup=10, active=100)) as prof:
+            for _ in range(100):
+                Y = W @ X
+                prof.step()
+        measure = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
 
-        print("cublas time: \t{:.5f}ms".format(measure.mean * 1000))
-        return measure.mean
+        print("cublas time: \t{:.5f}ms".format(measure))
+        return measure
 
 
 def bench_cusparse(csr: Any, X: th.Tensor):
@@ -455,11 +455,15 @@ def bench_cusparse(csr: Any, X: th.Tensor):
     with th.no_grad():
         W = W.half().to(0)
         X = X.to(0)
-        timer = benchmark.Timer(stmt="a @ b", globals={'a': W, 'b': X})
-        measure = timer.timeit(100)
+        with profile(activities=[ProfilerActivity.CUDA],
+                     schedule=schedule(wait=0, warmup=10, active=100)) as prof:
+            for _ in range(100):
+                Y = W @ X
+                prof.step()
+        measure = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
 
-        print("cusparse time: \t{:.5f}ms".format(measure.mean * 1000))
-        return measure.mean
+        print("cusparse time: \t{:.5f}ms".format(measure))
+        return measure
 
 
 if __name__ == "__main__":
@@ -509,4 +513,4 @@ if __name__ == "__main__":
                 "cublas_dur": cublas_durs,
                 "cusparse_dur": cusparse_durs
             })
-        pd.to_csv("single_op.csv", index=False)
+        pd.to_csv("structured_single_op.csv", index=False)

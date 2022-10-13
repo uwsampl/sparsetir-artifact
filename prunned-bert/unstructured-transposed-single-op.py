@@ -13,7 +13,7 @@ import tvm.testing
 import tvm.tir as tir
 from tvm.script import tir as T
 from tvm.sparse import lower_sparse_buffer, lower_sparse_iter
-import torch.utils.benchmark as benchmark
+from torch.profiler import profile, ProfilerActivity, schedule
 
 
 @T.prim_func
@@ -773,7 +773,7 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
     evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
     avg_time = evaluator(*args).mean
     print("tc-spmm time: \t{:.5f}ms".format(avg_time * 1000))
-    return avg_time
+    return avg_time * 1000
 
 
 def matmul(a, b):
@@ -784,16 +784,15 @@ def bench_cublas(W: th.Tensor, X: th.Tensor):
     with th.no_grad():
         W = W.half().to(0)
         X = X.to(0)
-        timer = benchmark.Timer(stmt="matmul(a, b)",
-                                setup="from __main__ import matmul",
-                                globals={
-                                    'a': W,
-                                    'b': X
-                                })
-        measure = timer.timeit(100)
+        with profile(activities=[ProfilerActivity.CUDA],
+                     schedule=schedule(wait=0, warmup=10, active=100)) as prof:
+            for _ in range(100):
+                Y = W @ X
+                prof.step()
+        measure = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
 
-        print("cublas time: \t{:.5f}ms".format(measure.mean * 1000))
-        return measure.mean
+        print("cublas time: \t{:.5f}ms".format(measure))
+        return measure
 
 
 def bench_cusparse(csr: Any, X: th.Tensor):
@@ -805,16 +804,15 @@ def bench_cusparse(csr: Any, X: th.Tensor):
     with th.no_grad():
         W = W.half().to(0)
         X = X.to(0)
-        timer = benchmark.Timer(stmt="matmul(a, b)",
-                                setup="from __main__ import matmul",
-                                globals={
-                                    'a': W,
-                                    'b': X
-                                })
-        measure = timer.timeit(100)
+        with profile(activities=[ProfilerActivity.CUDA],
+                     schedule=schedule(wait=0, warmup=10, active=100)) as prof:
+            for _ in range(100):
+                Y = W @ X
+                prof.step()
+        measure = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
 
-        print("cusparse time: \t{:.5f}ms".format(measure.mean * 1000))
-        return measure.mean
+        print("cusparse time: \t{:.5f}ms".format(measure))
+        return measure
 
 
 if __name__ == "__main__":
@@ -887,4 +885,4 @@ if __name__ == "__main__":
                 "cublas_dur": cublas_durs,
                 "cusparse_dur": cusparse_durs
             })
-        pd.to_csv("single_op.csv", index=False)
+        pd.to_csv("unstructured_single_op.csv", index=False)
