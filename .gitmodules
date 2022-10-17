@@ -13,3 +13,6 @@
 [submodule "3rdparty/taco"]
 	path = 3rdparty/taco
 	url = https://github.com/MasterJH5574/taco.git
+[submodule "3rdparty/sputnik"]
+	path = 3rdparty/sputnik
+	url = git@github.com:yzh119/sputnik.git
