@@ -3,10 +3,13 @@ from typing import Any
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 from transformers import BertModel
 from scipy import sparse as sp
+import pytest
 import numpy as np
 import torch as th
 import pandas as pd
+import triton
 import tvm
+import os
 from tvm.sparse.format import condense
 import tvm.testing
 import tvm.tir as tir
@@ -480,6 +483,44 @@ def bench_cusparse(csr: Any, X: th.Tensor):
         return measure
 
 
+def bench_triton(bsr: Any, X: th.Tensor):
+    indptr = bsr.indptr
+    indices = bsr.indices
+    M, K = bsr.shape
+    mb = M // bsr.blocksize[0]
+    kb = K // bsr.blocksize[1]
+    N = X.shape[1]
+    rows = []
+    cols = []
+    for i in range(mb):
+        row = i
+        for j in range(indptr[i], indptr[i + 1]):
+            col = indices[j]
+            rows.append(row)
+            cols.append(col)
+
+    rows = th.tensor(rows, dtype=th.long)
+    cols = th.tensor(cols, dtype=th.long)
+
+    mask = th.zeros(1, mb, kb, dtype=th.int32)
+    mask[0, rows, cols] = 1
+    mask = mask.to(0)
+
+    a_tri = triton.testing.sparsify_tensor(th.rand(1, 1, M, K, dtype=th.float16).to(0), mask, 32)
+    b_tri = X.view(1, 1, K, N).to(0)
+    op = triton.ops.blocksparse.matmul(mask, 32, "dsd", trans_a=False, trans_b=False, device="cuda")
+    c_tri = triton.testing.catch_oor(lambda: op(a_tri, b_tri), pytest)
+
+    with profile(activities=[ProfilerActivity.CUDA], schedule=schedule(wait=0, warmup=10, active=100)) as prof:
+        for _ in range(100):
+            op(a_tri, b_tri)
+            prof.step()
+ 
+    measure = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
+    print("triton time: \t{:.5f}ms".format(measure))
+    return measure
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("structured prunned bert")
     parser.add_argument("--dim",
@@ -492,6 +533,7 @@ if __name__ == "__main__":
                         action="store_true",
                         help="whether to dump csv file or not")
     args = parser.parse_args()
+
     tokenizer = AutoTokenizer.from_pretrained(
         "madlag/bert-base-uncased-squad1.1-block-sparse-0.07-v1")
 
@@ -501,14 +543,17 @@ if __name__ == "__main__":
     sparsetir_durs = []
     cublas_durs = []
     cusparse_durs = []
+    triton_durs = []
     densities = []
     for name, param in model.named_parameters():
         if name.endswith("key.weight") or name.endswith(
-                "value.weight") or name.endswith("query.weight") or name.endswith("dense.weight"):
+                "value.weight") or name.endswith(
+                    "query.weight") or name.endswith("dense.weight"):
 
             bsr_weight = sp.bsr_matrix(param.detach().numpy(),
                                        shape=param.shape,
                                        blocksize=(32, 32))
+
             csr_weight = sp.csr_matrix(param.detach().numpy())
             x = th.rand(csr_weight.shape[1], args.dim).half()
             densities.append(csr_weight.nnz / param.numel())
@@ -517,14 +562,16 @@ if __name__ == "__main__":
             sparsetir_durs.append(bench_bsrmm(bsr_weight, x))
             cublas_durs.append(bench_cublas(param.data, x))
             cusparse_durs.append(bench_cusparse(csr_weight, x))
+            triton_durs.append(bench_triton(bsr_weight, x))
 
-    print(sum(sparsetir_durs), sum(cublas_durs), sum(cusparse_durs))
+    print(sum(sparsetir_durs), sum(cublas_durs), sum(cusparse_durs), sum(triton_durs))
     if args.csv:
         pd = pd.DataFrame(
             data={
                 "density": densities,
                 "sparsetir_dur": sparsetir_durs,
                 "cublas_dur": cublas_durs,
-                "cusparse_dur": cusparse_durs
+                "cusparse_dur": cusparse_durs,
+                "triton_dur": triton_durs,
             })
         pd.to_csv("structured_single_op.csv", index=False)

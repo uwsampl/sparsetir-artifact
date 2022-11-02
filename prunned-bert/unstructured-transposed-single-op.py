@@ -6,7 +6,7 @@ import numpy as np
 import torch as th
 import pandas as pd
 import argparse
-import dgl
+import os
 import tvm
 from tvm.sparse.format import condense
 import tvm.testing
@@ -826,7 +826,15 @@ if __name__ == "__main__":
                         "-c",
                         action="store_true",
                         help="whether to dump csv file or not")
+    parser.add_argument("--generate",
+                        "-g",
+                        action="store_true",
+                        help="whether to dump weights.")
     args = parser.parse_args()
+    if not os.path.exists('data'):
+        os.mkdir('data/')
+        if not os.path.exists('data/unstruct'):
+            os.mkdir('data/unstruct')
 
     tokenizer = AutoTokenizer.from_pretrained(
         "huggingface/prunebert-base-uncased-6-finepruned-w-distil-squad")
@@ -868,6 +876,15 @@ if __name__ == "__main__":
                 "key.weight") or name.endswith(
                     "value.weight") or name.endswith("query.weight"):
             csr_weight = sp.csr_matrix(param.detach().numpy())
+            if args.generate:
+                indptr = csr_weight.indptr
+                indices = csr_weight.indices
+                shp = np.array(csr_weight.shape + (csr_weight.nnz,))
+                np.savez("data/unstruct/{}.npz".format(name),
+                    shape=shp.astype(np.int32),
+                    indptr=indptr.astype(np.int32),
+                    indices=indices.astype(np.int32))
+
             print("Density: {:.5f}".format(csr_weight.nnz / param.numel()))
             densities.append(csr_weight.nnz / param.numel())
             print(param.shape)
