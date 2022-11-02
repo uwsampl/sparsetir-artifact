@@ -389,27 +389,41 @@ def bench_bsrmm(bsr_mat: Any, x: th.Tensor):
     j, bi, f, bj = sch.get_loops(blk_inner)
     bio, bii = sch.split(bi, [2, 16])
     bjo, bji = sch.split(bj, [2, 16])
-    fo, fi = sch.split(f, [None, 16])
-    sch.reorder(fo, j, bio, bjo, bii, fi, bji)
+    foo, foi, fi = sch.split(f, [None, 2, 16])
+    sch.reorder(foo, j, bio, bjo, foi, bii, fi, bji)
     sch.lift_loop(bio)
-    new_blk = sch.blockize(bii)
     (i, bio) = sch.get_loops(blk_outer)
     i = sch.fuse(i, bio)
-    sch.bind(i, "blockIdx.x")
-    sch.bind(fo, "blockIdx.y")
-    C_local = sch.cache_write(new_blk, 0, "wmma.accumulator")
-    sch.reverse_compute_at(C_local, fo, True)
-    sch.decompose_reduction(new_blk, j)
+    io, ii = sch.split(i, [None, 1])
+    sch.bind(io, "blockIdx.x")
+    sch.bind(ii, "threadIdx.y")
+    # sch.bind(i, "blockIdx.x")
+    sch.bind(foo, "blockIdx.y")
+    sch.unroll(foi)
+    sch.unroll(bjo)
+    C_local = sch.cache_write(blk_inner, 0, "wmma.accumulator")
+    sch.reverse_compute_at(C_local, foo, True)
+    ax0, ax1 = sch.get_loops(C_local)[-2:]
+    ax1, ax2 = sch.split(ax1, [None, 16])
+    sch.reorder(ax1, ax0, ax2)
+    sch.unroll(ax1)
+    init_blk = sch.decompose_reduction(blk_inner, j)
+    ax = sch.get_loops(init_blk)[-3]
+    # sch.unroll(ax)
     A_local = sch.cache_read(blk_inner, 1, "wmma.matrix_a")
     B_local = sch.cache_read(blk_inner, 2, "wmma.matrix_b")
+    sch.compute_at(A_local, bjo)
+    sch.compute_at(B_local, foi)
     sch.hide_buffer_access(blk_inner, "read", [3])
     sch.tensorize(sch.get_loops(blk_inner)[-3], "wmma_sync")
     sch.tensorize(sch.get_loops(B_local)[-2], "wmma_load_b")
     sch.tensorize(sch.get_loops(A_local)[-2], "wmma_load_a")
     sch.tensorize(sch.get_loops(C_local)[-2], "wmma_store")
-    sch.tensorize(sch.get_loops(sch.get_block("bsrmm1_init"))[-2], "wmma_fill")
+    sch.tensorize(sch.get_loops(init_blk)[-2], "wmma_fill")
     mod = lower_sparse_buffer(sch.mod)
     f = tvm.build(mod["main"], target="cuda")
+    # print(f.imported_modules[0].get_source())
+    # assert False
 
     ctx = tvm.cuda(0)
     A_indptr = tvm.nd.array(np.copy(bsr_mat.indptr).astype("int32"),
@@ -479,10 +493,10 @@ if __name__ == "__main__":
                         help="whether to dump csv file or not")
     args = parser.parse_args()
     tokenizer = AutoTokenizer.from_pretrained(
-        "vuiseng9/bert-base-squadv1-block-pruning-hybrid")
+        "madlag/bert-base-uncased-squad1.1-block-sparse-0.07-v1")
 
     model = AutoModelForQuestionAnswering.from_pretrained(
-        "vuiseng9/bert-base-squadv1-block-pruning-hybrid")
+        "madlag/bert-base-uncased-squad1.1-block-sparse-0.07-v1")
 
     sparsetir_durs = []
     cublas_durs = []
@@ -490,7 +504,7 @@ if __name__ == "__main__":
     densities = []
     for name, param in model.named_parameters():
         if name.endswith("key.weight") or name.endswith(
-                "value.weight") or name.endswith("query.weight"):
+                "value.weight") or name.endswith("query.weight") or name.endswith("dense.weight"):
 
             bsr_weight = sp.bsr_matrix(param.detach().numpy(),
                                        shape=param.shape,

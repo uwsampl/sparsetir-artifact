@@ -44,12 +44,14 @@ def create_pixelfly(h, mb, fmt="mask", block_size=1):
 def create_longformer(h, mb, window, fmt="mask", block_size=1):
     rows = []
     cols = []
-    for i in range(mb - window):
+    for i in range(mb):
         for j in range(window):
+            if i + j >= mb:
+                continue
             rows.append(i)
             cols.append(i + j)
-    rows = torch.tensor(rows)
-    cols = torch.tensor(cols)
+    rows = torch.tensor(rows, dtype=torch.long)
+    cols = torch.tensor(cols, dtype=torch.long)
 
     if fmt == "mask":
         mask = torch.zeros(h, mb, mb, dtype=torch.int32)

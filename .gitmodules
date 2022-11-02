@@ -16,3 +16,6 @@
 [submodule "3rdparty/sputnik"]
 	path = 3rdparty/sputnik
 	url = git@github.com:yzh119/sputnik.git
+[submodule "3rdparty/torchsparse"]
+	path = 3rdparty/torchsparse
+	url = git@github.com:yzh119/torchsparse.git

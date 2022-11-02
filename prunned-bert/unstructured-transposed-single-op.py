@@ -713,35 +713,36 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
             T: tile_size,
             G: group_size,
         }))
+
     mod = lower_sparse_iter(mod)
     sch = tir.Schedule(mod)
     blk_outer = sch.get_block("tcspmm0")
     blk_inner = sch.get_block("tcspmm1")
-    (i, ) = sch.get_loops(blk_outer)
+    (i,) = sch.get_loops(blk_outer)
     sch.bind(i, "blockIdx.x")
     jo, ii, ji, f = sch.get_loops(blk_inner)
-    foo, foi, fi = sch.split(f, [None, min(1, feat_size // mma_n), mma_n])
+    foo, foi, fi = sch.split(f, [None, min(2, feat_size // mma_n), mma_n])
     sch.bind(foo, "blockIdx.y")
-    # sch.unroll(foi)
-    sch.reorder(foo, foi, jo, ii, ji, fi)
-    blk_inner_outer, blk_inner_inner = sch.blockize(ii), blk_inner
-    A_wmma = sch.cache_read(blk_inner_inner, 1, "wmma.matrix_a")
-    B_shared = sch.reverse_cache_read(blk_inner_inner, 2, "shared")
-    B_wmma = sch.reverse_cache_read(blk_inner_inner, 2, "wmma.matrix_b")
-    C_wmma = sch.cache_write(blk_inner_outer, 0, "wmma.accumulator")
-    sch.reverse_compute_at(C_wmma, foi)
-    init_blk = sch.decompose_reduction(blk_inner_outer, jo)
-    sch.hide_buffer_access(blk_inner_inner, "read", [3])
-    sch.tensorize(
-        sch.get_loops(A_wmma)[-2], "wmma_{}_load_a".format(mma_shape_str))
-    sch.tensorize(
-        sch.get_loops(C_wmma)[-2], "wmma_{}_store".format(mma_shape_str))
-    sch.tensorize(
-        sch.get_loops(B_wmma)[-2], "wmma_{}_load_b".format(mma_shape_str))
-    sch.tensorize(
-        sch.get_loops(blk_inner_inner)[-3],
-        "wmma_{}_sync".format(mma_shape_str))
-    ax0, ax1 = sch.get_loops(B_shared)
+    sch.unroll(foi)
+    sch.reorder(foo, jo, foi, ii, ji, fi)
+    A_wmma = sch.cache_read(blk_inner, 0, "wmma.matrix_a")
+    sch.compute_at(A_wmma, jo)
+    B_shared = sch.reverse_cache_read(blk_inner, 1, "shared")
+    sch.compute_at(B_shared, foi)
+    C_wmma = sch.cache_write(blk_inner, 0, "wmma.accumulator")
+    sch.reverse_compute_at(C_wmma, foo)
+    B_wmma = sch.reverse_cache_read(blk_inner, 1, "wmma.matrix_b")
+    ax0, ax1 = sch.get_loops(C_wmma)[-2:]
+    ax1, ax2 = sch.split(ax1, [None, mma_n])
+    sch.reorder(ax1, ax0, ax2)
+    sch.unroll(ax1)
+    init_blk = sch.decompose_reduction(blk_inner, jo)
+    sch.hide_buffer_access(blk_inner, "read", [3])
+    sch.tensorize(sch.get_loops(A_wmma)[-2], "wmma_{}_load_a".format(mma_shape_str))
+    sch.tensorize(sch.get_loops(C_wmma)[-2], "wmma_{}_store".format(mma_shape_str))
+    sch.tensorize(sch.get_loops(B_wmma)[-2], "wmma_{}_load_b".format(mma_shape_str))
+    sch.tensorize(sch.get_loops(blk_inner)[-3], "wmma_{}_sync".format(mma_shape_str))
+    ax0, ax1 = sch.get_loops(B_shared)[-2:]
     ax = sch.fuse(ax0, ax1)
     warp_size = 32
     vector_length = 8
@@ -750,13 +751,12 @@ def bench_tc_spmm(sp_mat: Any, x: th.Tensor, mma_shape_str: str):
     sch.bind(ax1, "threadIdx.x")
     sch.vectorize(ax2)
     sch.tensorize(
-        sch.get_loops(sch.get_block("tcspmm1_init"))[-2],
-        "wmma_{}_fill".format(mma_shape_str))
+        sch.get_loops(sch.get_block("tcspmm1_init"))[-2], "wmma_{}_fill".format(mma_shape_str)
+    )
 
     mod = lower_sparse_buffer(sch.mod)
     f = tvm.build(mod, target="cuda")
     # print(f.imported_modules[0].get_source())
-    # assert False
 
     # prepare input
     dev = tvm.cuda(0)

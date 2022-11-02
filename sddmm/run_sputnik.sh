@@ -17,6 +17,6 @@ do
     for feat_size in 32 64 128 256 512
     do
         echo "-----feat size:" ${feat_size} "-----"
-        ./spmm_benchmark ../../../../spmm/data/${dataset}.npz ${feat_size}
+        ./sddmm_benchmark ../../../../spmm/data/${dataset}.npz ${feat_size}
     done
 done
