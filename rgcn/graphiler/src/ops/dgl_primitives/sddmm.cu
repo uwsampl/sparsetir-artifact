@@ -5,7 +5,8 @@
  */
 #include "./functor.cuh"
 #include "./sddmm.cuh"
-#include "THC/THC.h"
+//#include "THC/THC.h"
+#include <ATen/ATen.h>
 
 namespace dgl {
 namespace aten {

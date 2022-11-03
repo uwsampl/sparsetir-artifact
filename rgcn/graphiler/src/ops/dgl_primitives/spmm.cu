@@ -7,7 +7,8 @@
 #include "functor.cuh"
 #include "spmm.cuh"
 #include <ATen/cuda/CUDAContext.h>
-#include <THC/THC.h>
+//#include <THC/THC.h>
+#include <ATen/ATen.h>
 #include <cusparse_v2.h>
 #include <torch/torch.h>
 
