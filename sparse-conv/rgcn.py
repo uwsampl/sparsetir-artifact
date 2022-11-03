@@ -888,5 +888,6 @@ def rgcn_tensorcore(
 
     # evaluate time
     evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=10)
-    print("sparse-tir:\t\t{:.3f} ms".format(evaluator(*args).mean * 1000))
-    return answer
+    measure = evaluator(*args).mean * 1000
+    print("sparse-tir:\t\t{:.3f} ms".format(measure))
+    return answer, measure
