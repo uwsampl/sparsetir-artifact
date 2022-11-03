@@ -11,14 +11,14 @@ from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset
 
 from RGCN_DGL import RGCN_DGL, RGCN_DGL_hetero
 from RGCN_PyG import RGCN_PyG
-from RGCN_sparse_tir import RGCNSparseTIRHetero, RGCNSparseTIRHomo
+from RGCN_sparse_tir import RGCNSparseTIRNaive, RGCNSparseTIRComposable, RGCNSparseTIRTensorCores
 
 device = setup()
 
 # to successfully benchmark this model using Seastar
 # a smaller feature dimension is used in the paper
-RGCN_FEAT_DIM = 16
-DEFAULT_DIM = 16
+RGCN_FEAT_DIM = 32
+DEFAULT_DIM = 32
 
 
 # note: for heterogenous GNNs, instead of remaining compatible with DGL interface
@@ -39,6 +39,7 @@ mpdfg = mpdfg_builder(message_func, reduce_func)
 
 
 class RGCNLayer(nn.Module):
+
     def __init__(self, in_dim, out_dim, num_rels):
         super(RGCNLayer, self).__init__()
         self.weight = torch.rand(num_rels, in_dim, out_dim).to(device)
@@ -63,6 +64,7 @@ class RGCNLayer(nn.Module):
 
 
 class RGCN(nn.Module):
+
     def __init__(self, in_dim, hidden_dim, out_dim, num_rels):
         super(RGCN, self).__init__()
 
@@ -77,8 +79,10 @@ class RGCN(nn.Module):
 
 
 def profile(dataset, feat_dim, repeat=1000):
-    log = init_log(["0-DGL-UDF", "1-DGL-slice", "2-PyG-slice",
-                    "3-DGL-bmm", "4-PyG-bmm", "5-Graphiler"], ["time", "mem"])
+    log = init_log([
+        "0-DGL-UDF", "1-DGL-slice", "2-PyG-slice", "3-DGL-bmm", "4-PyG-bmm",
+        "5-Graphiler"
+    ], ["time", "mem"])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim, prepare=False)
     g_hetero, _ = load_data(dataset, feat_dim, to_homo=False)
@@ -89,14 +93,23 @@ def profile(dataset, feat_dim, repeat=1000):
         g, _ = load_data(dataset, feat_dim, prepare=True)
         g = g.to(device)
         norm = torch.rand(g.num_edges(), 1).to(device)
-        net = RGCN(feat_dim, DEFAULT_DIM,
-                   feat_dim, g.num_rels).to(device)
+        net = RGCN(feat_dim, DEFAULT_DIM, feat_dim, g.num_rels).to(device)
         net.eval()
         with torch.no_grad():
-            compile_res = bench(net=net, net_params=(
-                g, features, norm, True), tag="5-Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
-            res = bench(net=net, net_params=(g, features, norm, False),
-                        tag="0-DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
+            compile_res = bench(net=net,
+                                net_params=(g, features, norm, True),
+                                tag="5-Graphiler",
+                                nvprof=False,
+                                repeat=repeat,
+                                memory=True,
+                                log=log)
+            res = bench(net=net,
+                        net_params=(g, features, norm, False),
+                        tag="0-DGL-UDF",
+                        nvprof=False,
+                        repeat=repeat,
+                        memory=True,
+                        log=log)
             check_equal(compile_res, res)
         del g, norm, net, compile_res, res
 
@@ -104,62 +117,107 @@ def profile(dataset, feat_dim, repeat=1000):
     def run_dgl_hetero(g_hetero, features):
         g_hetero = g_hetero.to(device)
         rel_names = list(set(g_hetero.etypes))
-        net_dgl_hetero = RGCN_DGL_hetero(
-            feat_dim, DEFAULT_DIM, feat_dim, rel_names, len(rel_names)).to(device)
+        net_dgl_hetero = RGCN_DGL_hetero(feat_dim, DEFAULT_DIM, feat_dim,
+                                         rel_names, len(rel_names)).to(device)
         net_dgl_hetero.eval()
         with torch.no_grad():
-            bench(net=net_dgl_hetero, net_params=(
-                g_hetero, g_hetero.ndata['h']), tag="1-DGL-slice", nvprof=False, repeat=repeat, memory=True, log=log)
+            bench(net=net_dgl_hetero,
+                  net_params=(g_hetero, g_hetero.ndata['h']),
+                  tag="1-DGL-slice",
+                  nvprof=False,
+                  repeat=repeat,
+                  memory=True,
+                  log=log)
         del g_hetero, rel_names, net_dgl_hetero
-    
+
     @empty_cache
-    def run_sparse_tir_homo(g, features):
-        g = g.to(device)
-        norm = torch.rand(g.num_edges(), 1).to(device)
-        net = RGCNSparseTIRHomo(
-            feat_dim, DEFAULT_DIM, feat_dim, g.num_rels).to(device)
-        net.eval()
-        with torch.no_grad():
-            bench(net=net, net_params=(
-                g, features, g.edata['_TYPE'], norm), tag="sparse_tir", nvprof=False, repeat=repeat, memory=True, log=log)
-        del g, norm, net
-    
-    @empty_cache
-    def run_sparse_tir_hetero(dataset, g_hetero, features):
+    def run_sparse_tir_naive(dataset, g_hetero, features):
         g_hetero = g_hetero.to(device)
         rel_names = list(set(g_hetero.etypes))
-        net = RGCNSparseTIRHetero(
-            dataset, feat_dim, DEFAULT_DIM, feat_dim, len(g_hetero.etypes)).to(device)
+        net = RGCNSparseTIRNaive(dataset, feat_dim, DEFAULT_DIM, feat_dim,
+                                 len(g_hetero.etypes)).to(device)
         net.eval()
         with torch.no_grad():
-            bench(net=net, net_params=(
-                g_hetero, features), tag="sparse_tir_hetero", nvprof=False, repeat=repeat, memory=True, log=log)
+            bench(net=net,
+                  net_params=(g_hetero, features),
+                  tag="sparse_tir_naive",
+                  nvprof=False,
+                  repeat=repeat,
+                  memory=True,
+                  log=log)
         del g_hetero, rel_names, net
- 
+
+    @empty_cache
+    def run_sparse_tir_composable(dataset, g_hetero, features):
+        g_hetero = g_hetero.to(device)
+        rel_names = list(set(g_hetero.etypes))
+        net = RGCNSparseTIRComposable(dataset, feat_dim, DEFAULT_DIM, feat_dim,
+                                      len(g_hetero.etypes)).to(device)
+        net.eval()
+        with torch.no_grad():
+            bench(net=net,
+                  net_params=(g_hetero, features),
+                  tag="sparse_tir_composable",
+                  nvprof=False,
+                  repeat=repeat,
+                  memory=True,
+                  log=log)
+        del g_hetero, rel_names, net
+
+    @empty_cache
+    def run_sparse_tir_tensorcores(dataset, g_hetero, features):
+        g_hetero = g_hetero.to(device)
+        rel_names = list(set(g_hetero.etypes))
+        net = RGCNSparseTIRTensorCores(dataset, feat_dim,
+                                       DEFAULT_DIM, feat_dim,
+                                       len(g_hetero.etypes)).to(device)
+        net.eval()
+        with torch.no_grad():
+            bench(net=net,
+                  net_params=(g_hetero, features),
+                  tag="sparse_tir_tensorcores",
+                  nvprof=False,
+                  repeat=repeat,
+                  memory=True,
+                  log=log)
+        del g_hetero, rel_names, net
 
     @empty_cache
     def run_pyg_bmm(g, features):
         edge_type = g.edata['_TYPE']
         u, v = g.edges()
         adj = torch.stack([u, v]).to(device)
-        net_pyg_bmm = RGCN_PyG(feat_dim, DEFAULT_DIM,
-                               DEFAULT_DIM, g.num_rels, mode='bmm').to(device)
+        net_pyg_bmm = RGCN_PyG(feat_dim,
+                               DEFAULT_DIM,
+                               DEFAULT_DIM,
+                               g.num_rels,
+                               mode='bmm').to(device)
         net_pyg_bmm.eval()
         with torch.no_grad():
-            bench(net=net_pyg_bmm, net_params=(adj, features, edge_type),
-                  tag="4-PyG-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
+            bench(net=net_pyg_bmm,
+                  net_params=(adj, features, edge_type),
+                  tag="4-PyG-bmm",
+                  nvprof=False,
+                  repeat=repeat,
+                  memory=True,
+                  log=log)
         del edge_type, u, v, adj, net_pyg_bmm
 
     @empty_cache
     def run_dgl_bmm(g, features):
         g = g.to(device)
         norm = torch.rand(g.num_edges(), 1).to(device)
-        net_dgl = RGCN_DGL(
-            feat_dim, DEFAULT_DIM, feat_dim, g.num_rels).to(device)
+        net_dgl = RGCN_DGL(feat_dim, DEFAULT_DIM, feat_dim,
+                           g.num_rels).to(device)
         net_dgl.eval()
         with torch.no_grad():
-            bench(net=net_dgl, net_params=(
-                g, features, g.edata['_TYPE'], norm), tag="3-DGL-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
+            bench(net=net_dgl,
+                  net_params=(g, features, g.edata['_TYPE'], norm),
+                  tag="3-DGL-bmm",
+                  nvprof=False,
+                  repeat=repeat,
+                  memory=True,
+                  log=log)
         del g, norm, net_dgl
 
     @empty_cache
@@ -167,12 +225,20 @@ def profile(dataset, feat_dim, repeat=1000):
         edge_type = g.edata['_TYPE']
         u, v = g.edges()
         adj = torch.stack([u, v]).to(device)
-        net_pyg_slice = RGCN_PyG(feat_dim, DEFAULT_DIM,
-                                 DEFAULT_DIM, g.num_rels, mode='slice').to(device)
+        net_pyg_slice = RGCN_PyG(feat_dim,
+                                 DEFAULT_DIM,
+                                 DEFAULT_DIM,
+                                 g.num_rels,
+                                 mode='slice').to(device)
         net_pyg_slice.eval()
         with torch.no_grad():
-            bench(net=net_pyg_slice, net_params=(adj, features, edge_type),
-                  tag="2-PyG-slice", nvprof=False, repeat=repeat, memory=True, log=log)
+            bench(net=net_pyg_slice,
+                  net_params=(adj, features, edge_type),
+                  tag="2-PyG-slice",
+                  nvprof=False,
+                  repeat=repeat,
+                  memory=True,
+                  log=log)
         del edge_type, u, v, adj, net_pyg_slice
 
     run_baseline_graphiler(g, features)
@@ -180,8 +246,9 @@ def profile(dataset, feat_dim, repeat=1000):
     run_dgl_hetero(g_hetero, features)
     run_pyg_bmm(g, features)
     run_pyg_slice(g, features)
-    run_sparse_tir_homo(g, features)
-    run_sparse_tir_hetero(dataset, g_hetero, features)
+    run_sparse_tir_naive(dataset, g_hetero, features)
+    run_sparse_tir_composable(dataset, g_hetero, features)
+    run_sparse_tir_tensorcores(dataset, g_hetero, features)
 
     return log
 
