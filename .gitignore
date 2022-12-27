@@ -1,2 +1,5 @@
 *.mtx
 *.npz
+*.log
+*.csv
+.vscode/
