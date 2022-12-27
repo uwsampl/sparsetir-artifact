@@ -5,3 +5,9 @@ This repo stores scripts for setting up environments and reproducing results in 
 We suggest using NVIDIA container to setup environments, please install these packages below by following their instructions:
 - [Docker](https://docs.docker.com/engine/install/)
 - [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+
+## Build Docker Container
+
+```bash
+docker build -t sparsetir-artifact .
+```
