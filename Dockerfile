@@ -11,13 +11,19 @@ RUN apt update --fix-missing
 COPY install/ubuntu_install_core.sh /install/ubuntu_install_core.sh
 RUN bash /install/ubuntu_install_core.sh
 
-# install miniconda
-COPY install/install_conda.sh /install/install_conda.sh
-RUN bash /install/install_conda.sh
+# install python
+COPY install/install_python.sh /install/install_python.sh
+RUN bash /install/install_python.sh
 
 # install pytorch
+COPY install/install_pytorch.sh /install/install_pytorch.sh
+RUN bash /install/install_pytorch.sh
 
 # install dgl and pytorch geometric
+COPY install/install_dgl.sh /install/install_dgl.sh
+RUN bash /install/install_dgl.sh
+COPY install/install_pyg.sh /install/install_pyg.sh
+RUN bash /install/install_pyg.sh
 
 # compile & install dgSPARSE
 
