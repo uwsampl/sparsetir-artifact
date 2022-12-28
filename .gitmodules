@@ -19,3 +19,6 @@
 [submodule "3rdparty/torchsparse"]
 	path = 3rdparty/torchsparse
 	url = git@github.com:yzh119/torchsparse.git
+[submodule "3rdparty/SparseTIR"]
+	path = 3rdparty/SparseTIR
+	url = git@github.com:uwsampl/SparseTIR.git

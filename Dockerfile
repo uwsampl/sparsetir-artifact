@@ -25,6 +25,14 @@ RUN bash /install/install_dgl.sh
 COPY install/install_pyg.sh /install/install_pyg.sh
 RUN bash /install/install_pyg.sh
 
+# install SparseTIR
+COPY 3rdparty/SparseTIR /root/SparseTIR
+WORKDIR /root/SparseTIR
+RUN bash docker/install/install_sparsetir_gpu.sh
+ENV PYTHONPATH=python/:${PYTHONPATH}
+
+# compile & install glog
+
 # compile & install dgSPARSE
 
 # compile & install Sputnik
