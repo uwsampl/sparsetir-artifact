@@ -20,7 +20,27 @@ set -e
 set -u
 set -o pipefail
 
-
-pip3 install dgl-cu116==0.9.1 -f https://data.dgl.ai/wheels/repo.html
-mkdir -p ~/.dgl/
-echo '{"backend": "pytorch"}' > ~/.dgl/config.json
+# install libraries for python package on ubuntu
+pip3 install --upgrade \
+    attrs \
+    cloudpickle \
+    cython \
+    decorator \
+    mypy \
+    numpy~=1.19.5 \
+    orderedset \
+    packaging \
+    Pillow \
+    psutil \
+    pytest \
+    tlcpack-sphinx-addon==0.2.1 \
+    pytest-profiling \
+    pytest-xdist \
+    requests \
+    scipy \
+    Jinja2 \
+    synr==0.6.0 \
+    junitparser==2.4.2 \
+    six \
+    tornado \
+    pytest-lazy-fixture

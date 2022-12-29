@@ -6,6 +6,12 @@ We suggest using NVIDIA container to setup environments, please install these pa
 - [Docker](https://docs.docker.com/engine/install/)
 - [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
 
+## Clone the Repository
+
+```bash
+git clone git@github.com:uwsampl/sparsetir-artifact.git --recursive
+cd sparsetir-artifact
+```
 ## Build Docker Container
 
 ```bash

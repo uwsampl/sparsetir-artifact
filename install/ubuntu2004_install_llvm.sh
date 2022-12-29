@@ -20,7 +20,15 @@ set -e
 set -u
 set -o pipefail
 
+echo deb http://apt.llvm.org/focal/ llvm-toolchain-focal main >> /etc/apt/sources.list.d/llvm.list
+echo deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal main >> /etc/apt/sources.list.d/llvm.list
 
-pip3 install dgl-cu116==0.9.1 -f https://data.dgl.ai/wheels/repo.html
-mkdir -p ~/.dgl/
-echo '{"backend": "pytorch"}' > ~/.dgl/config.json
+# 14
+echo deb http://apt.llvm.org/focal/ llvm-toolchain-focal-14 main >> /etc/apt/sources.list.d/llvm.list
+echo deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-14 main >> /etc/apt/sources.list.d/llvm.list
+
+wget -q -O - http://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
+
+apt-get update && apt-get install -y \
+     llvm-14 \
+     clang-14 libclang-14-dev
