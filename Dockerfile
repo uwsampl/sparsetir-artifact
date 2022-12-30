@@ -11,6 +11,10 @@ RUN apt update --fix-missing
 COPY install/ubuntu_install_core.sh /install/ubuntu_install_core.sh
 RUN bash /install/ubuntu_install_core.sh
 
+# install cmake 3.20
+COPY install/install_cmake_source.sh /install/install_cmake_source.sh
+RUN bash /install/install_cmake_source.sh
+
 # install python
 COPY install/install_python.sh /install/install_python.sh
 RUN bash /install/install_python.sh
@@ -48,8 +52,6 @@ RUN rm -rf build\
     && make -j\
     && make install
 
-# compile & install taco
-
 # compile & install torchsparse
 RUN apt install libsparsehash-dev
 COPY 3rdparty/torchsparse /tmp/torchsparse
@@ -75,7 +77,26 @@ RUN rm -rf build/\
     && make\
     && mkdir -p ~/.dgl\
     && mv libgraphiler.so ~/.dgl/
-RUN cd .. && python3 setup.py install
+RUN python3 setup.py install
+
+# compile & install taco
+# COPY 3rdparty/taco /tmp/taco
+# WORKDIR /tmp/taco
+# RUN rm -rf build/\
+#     && mkdir build\
+#     && cd build/\
+#     && cmake ..\
+#     && make
+
+# compile & install Sputnik
+COPY 3rdparty/sputnik /tmp/sputnik
+WORKDIR /tmp/sputnik
+RUN rm -rf build\
+    && mkdir build\
+    && cd build/\
+    && cmake ..\
+    && make -j\
+    && make install
 
 # compile & install triton
 # COPY 3rdparty/triton /tmp/triton
@@ -87,15 +108,5 @@ RUN cd .. && python3 setup.py install
 #     && make -j\
 #     && make install
 # RUN python3 python/setup.py install
-
-# compile & install Sputnik
-# COPY 3rdparty/sputnik /tmp/sputnik
-# WORKDIR /tmp/sputnik
-# RUN rm -rf build\
-#     && mkdir build\
-#     && cd build/\
-#     && cmake ..\
-#     && make -j\
-#     && make install
 
 # compile & install dgSPARSE
