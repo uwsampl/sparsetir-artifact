@@ -41,20 +41,61 @@ RUN bash docker/install/install_sparsetir_gpu.sh
 # compile & install glog
 COPY 3rdparty/glog /tmp/glog/
 WORKDIR /tmp/glog
-RUN mkdir build
-RUN cd build/\
+RUN rm -rf build\
+    && mkdir build\
+    && cd build/\
     && cmake ..\
     && make -j\
     && make install
 
-# compile & install dgSPARSE
-
-# compile & install Sputnik
-
 # compile & install taco
 
 # compile & install torchsparse
+RUN apt install libsparsehash-dev
+COPY 3rdparty/torchsparse /tmp/torchsparse
+WORKDIR /tmp/torchsparse
+RUN python3 setup.py install
 
-# compile & install triton
+# compile & install kineto
+COPY 3rdparty/kineto /tmp/kineto
+WORKDIR /tmp/kineto
+RUN cd libkineto\
+    && rm -rf build/ && mkdir build\
+    && cd build\
+    && cmake .. && make -j\
+    && make install
 
 # compile & install graphiler
+COPY 3rdparty/graphiler /tmp/graphiler
+WORKDIR /tmp/graphiler
+RUN rm -rf build/\
+    && mkdir build\
+    && cd build/\
+    && cmake -DCMAKE_PREFIX_PATH="$(python3 -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')" ..\
+    && make\
+    && mkdir -p ~/.dgl\
+    && mv libgraphiler.so ~/.dgl/
+RUN cd .. && python3 setup.py install
+
+# compile & install triton
+# COPY 3rdparty/triton /tmp/triton
+# WORKDIR /tmp/triton
+# RUN rm -rf build\
+#     && mkdir build\
+#     && cd build/\
+#     && cmake ..\
+#     && make -j\
+#     && make install
+# RUN python3 python/setup.py install
+
+# compile & install Sputnik
+# COPY 3rdparty/sputnik /tmp/sputnik
+# WORKDIR /tmp/sputnik
+# RUN rm -rf build\
+#     && mkdir build\
+#     && cd build/\
+#     && cmake ..\
+#     && make -j\
+#     && make install
+
+# compile & install dgSPARSE

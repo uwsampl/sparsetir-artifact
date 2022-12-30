@@ -22,3 +22,6 @@
 [submodule "3rdparty/SparseTIR"]
 	path = 3rdparty/SparseTIR
 	url = git@github.com:uwsampl/SparseTIR.git
+[submodule "3rdparty/kineto"]
+	path = 3rdparty/kineto
+	url = git@github.com:pytorch/kineto.git
