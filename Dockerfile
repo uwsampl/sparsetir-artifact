@@ -94,7 +94,7 @@ WORKDIR /tmp/sputnik
 RUN rm -rf build\
     && mkdir build\
     && cd build/\
-    && cmake ..\
+    && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TEST=ON -DBUILD_BENCHMARK=ON -DCUDA_ARCHS="70;75"\
     && make -j\
     && make install
 
