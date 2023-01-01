@@ -1,12 +1,6 @@
-[submodule "3rdparty/dgsparse"]
-	path = 3rdparty/dgsparse
-	url = git@github.com/dgSPARSE/dgSPARSE-Library.git
 [submodule "3rdparty/glog"]
 	path = 3rdparty/glog
 	url = git@github.com/google/glog.git
-[submodule "3rdparty/cnpy"]
-	path = 3rdparty/cnpy
-	url = git@github.com/rogersce/cnpy.git
 [submodule "3rdparty/triton"]
 	path = 3rdparty/triton
 	url = git@github.com/MasterJH5574/triton.git
