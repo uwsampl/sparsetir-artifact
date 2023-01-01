@@ -79,15 +79,6 @@ RUN rm -rf build/\
     && mv libgraphiler.so ~/.dgl/
 RUN python3 setup.py install
 
-# compile & install taco
-# COPY 3rdparty/taco /tmp/taco
-# WORKDIR /tmp/taco
-# RUN rm -rf build/\
-#     && mkdir build\
-#     && cd build/\
-#     && cmake ..\
-#     && make
-
 # compile & install Sputnik
 COPY 3rdparty/sputnik /tmp/sputnik
 WORKDIR /tmp/sputnik
@@ -95,6 +86,16 @@ RUN rm -rf build\
     && mkdir build\
     && cd build/\
     && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TEST=ON -DBUILD_BENCHMARK=ON -DCUDA_ARCHS="70;75"\
+    && make -j\
+    && make install
+
+# compile & install dgSPARSE
+COPY 3rdparty/dgsparse /tmp/dgsparse
+WORKDIR /tmp/dgsparse
+RUN rm -rf build\
+    && mkdir build\
+    && cd build/\
+    && cmake ..\
     && make -j\
     && make install
 
@@ -109,4 +110,12 @@ RUN rm -rf build\
 #     && make install
 # RUN python3 python/setup.py install
 
-# compile & install dgSPARSE
+# compile & install taco
+# COPY 3rdparty/taco /tmp/taco
+# WORKDIR /tmp/taco
+# RUN rm -rf build/\
+#     && mkdir build\
+#     && cd build/\
+#     && cmake ..\
+#     && make
+
