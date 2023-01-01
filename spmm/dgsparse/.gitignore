@@ -1,5 +1,0 @@
-*.o
-*.out
-*.a
-__pycache__
-build/
