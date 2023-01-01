@@ -23,3 +23,7 @@
 	path = 3rdparty/dgsparse
 	url = git@github.com:yzh119/dgsparse.git
 	branch = v0.1-cmake
+[submodule "3rdparty/graphiler"]
+	path = 3rdparty/graphiler
+	url = git@github.com:yzh119/graphiler.git
+	branch = new-pytorch-api
