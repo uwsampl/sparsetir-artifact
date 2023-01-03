@@ -100,22 +100,17 @@ RUN rm -rf build\
     && make install
 
 # compile & install triton
-# COPY 3rdparty/triton /tmp/triton
-# WORKDIR /tmp/triton
-# RUN rm -rf build\
-#     && mkdir build\
-#     && cd build/\
-#     && cmake ..\
-#     && make -j\
-#     && make install
-# RUN python3 python/setup.py install
+COPY 3rdparty/triton /tmp/triton
+WORKDIR /tmp/triton
+RUN cd python\
+    && pip3 install -e .
 
 # compile & install taco
-# COPY 3rdparty/taco /tmp/taco
-# WORKDIR /tmp/taco
-# RUN rm -rf build/\
-#     && mkdir build\
-#     && cd build/\
-#     && cmake ..\
-#     && make
+COPY 3rdparty/taco /tmp/taco
+WORKDIR /tmp/taco
+RUN rm -rf build/\
+    && mkdir build\
+    && cd build/\
+    && cmake ..\
+    && make
 
