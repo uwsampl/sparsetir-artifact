@@ -3,7 +3,7 @@
 	url = git@github.com/google/glog.git
 [submodule "3rdparty/triton"]
 	path = 3rdparty/triton
-	url = git@github.com/MasterJH5574/triton.git
+	url = git@github.com:yzh119/triton.git
 [submodule "3rdparty/taco"]
 	path = 3rdparty/taco
 	url = git@github.com/MasterJH5574/taco.git
