@@ -1,12 +1,13 @@
 [submodule "3rdparty/glog"]
 	path = 3rdparty/glog
-	url = git@github.com/google/glog.git
+	url = git@github.com:google/glog.git
 [submodule "3rdparty/triton"]
 	path = 3rdparty/triton
 	url = git@github.com:yzh119/triton.git
+	branch = llvm14
 [submodule "3rdparty/taco"]
 	path = 3rdparty/taco
-	url = git@github.com/MasterJH5574/taco.git
+	url = git@github.com:MasterJH5574/taco.git
 [submodule "3rdparty/sputnik"]
 	path = 3rdparty/sputnik
 	url = git@github.com:yzh119/sputnik.git
