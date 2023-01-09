@@ -463,5 +463,5 @@ if __name__ == "__main__":
             rtol=1e-2,
         )
 
-    evaluator = f.time_evaluator(f.entry_name, ctx, number=100)
+    evaluator = f.time_evaluator(f.entry_name, ctx, number=1, repeat=100)
     print("avg time: {} ms".format(evaluator(*fargs).mean * 1000))

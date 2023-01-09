@@ -494,7 +494,7 @@ def bench_bsrmm(bsr_mat: Any, x: th.Tensor, block_size: int):
     args = [A_data, X_nd, Y_nd, A_indptr, A_indices]
     f(*args)
 
-    evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
+    evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=1, repeat=100)
     avg_time = evaluator(*args).mean
     print("bsrmm time: \t{:.5f}ms".format(avg_time * 1000))
     return avg_time * 1000
@@ -585,7 +585,7 @@ def bench_dbsrmm(bsr_mat: Any, x: th.Tensor, block_size: int):
     args = [A_data, X_nd, Y_nd, row_indices_nd, A_indptr, A_indices]
     f(*args)
 
-    evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
+    evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=1, repeat=100)
     avg_time = evaluator(*args).mean
     print("dbsrmm time: \t{:.5f}ms".format(avg_time * 1000))
     return avg_time * 1000

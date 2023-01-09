@@ -80,10 +80,10 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
     preproc(a_nd, b_nd, c_nd, indptr_nd, indices_nd, mid_nd)
 
     best = 1e9
-    for ty in [1, 2, 4, 8]:
-        for tx in [8, 16, 32]:
-            for vec_size in [1, 2, 4]:
-                for group_size in [1, 2, 4]:
+    for ty in [4]:#[1, 2, 4, 8]:
+        for tx in [8]:#[8, 16, 32]:
+            for vec_size in [4]:#[1, 2, 4]:
+                for group_size in [4]:#[1, 2, 4]:
                     if tx * vec_size > feat_size:
                         continue
                     # schedule compute
@@ -99,21 +99,29 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
                     sch.unroll(ji)
                     sch.reverse_compute_at(blk, joi, True)
                     sch.set_scope(rf_blk, 0, "local")
-                    read_A = sch.cache_read(rf_blk, 0, "local")
-                    read_B = sch.cache_read(rf_blk, 2, "local")
+                    read_A = sch.reverse_cache_read(rf_blk, 0, "local", preserve_unit_loops=True)
+                    read_B = sch.reverse_cache_read(rf_blk, 2, "local", preserve_unit_loops=True)
+                    # read_A = sch.cache_read(rf_blk, 0, "local")
+                    # read_B = sch.cache_read(rf_blk, 2, "local")
+                    print(sch.mod["main"].script())
+                    assert False
                     write_C = sch.cache_write(blk, 0, "local")
                     ko, kio, kii = sch.get_loops(rf_blk)[-3:]
                     sch.reorder(ko, ji)
                     # schedule read A
-                    sch.compute_at(read_A, ji, True)
-                    ax0, ax1 = sch.split(sch.get_loops(read_A)[-1], [tx, vec_size])
+                    sch.compute_at(read_A, ko, True)
+                    # ax0, ax1 = sch.split(sch.get_loops(read_A)[-1], [tx, vec_size])
+                    ax0, _, ax2, _, ax4 = sch.get_loops(read_A)[-5:]
                     sch.bind(ax0, "threadIdx.x")
-                    sch.vectorize(ax1)
+                    sch.unroll(ax2)
+                    sch.vectorize(ax4)
                     # schedule read B
-                    sch.compute_at(read_B, ji, True)
-                    ax0, ax1 = sch.split(sch.get_loops(read_B)[-1], [tx, vec_size])
+                    sch.compute_at(read_B, ko, True)
+                    # ax0, ax1 = sch.split(sch.get_loops(read_B)[-1], [tx, vec_size])
+                    ax0, _, ax2, _, ax4 = sch.get_loops(read_B)[-5:]
                     sch.bind(ax0, "threadIdx.x")
-                    sch.vectorize(ax1)
+                    sch.unroll(ax2)
+                    sch.vectorize(ax4)
                     # schedule write C
                     sch.reverse_compute_at(write_C, joi, True)
                     ax0, ax1 = sch.get_loops(write_C)[-2:]
@@ -137,7 +145,7 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
                     tvm.testing.assert_allclose(c_nd.numpy(), c_golden.view(-1).cpu(), rtol=1e-5)
 
                     # evaluate time
-                    evaluator = sddmm.time_evaluator(sddmm.entry_name, tvm.cuda(0), number=10)
+                    evaluator = sddmm.time_evaluator(sddmm.entry_name, tvm.cuda(0), number=1, repeat=100)
                     mean_time = evaluator(*args).mean * 1000
 
                     if mean_time < best:
