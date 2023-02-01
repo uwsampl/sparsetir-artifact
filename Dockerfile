@@ -11,7 +11,7 @@ RUN apt update --fix-missing
 COPY install/ubuntu_install_core.sh /install/ubuntu_install_core.sh
 RUN bash /install/ubuntu_install_core.sh
 
-# install cmake 3.20
+# install cmake 3.24
 COPY install/install_cmake_source.sh /install/install_cmake_source.sh
 RUN bash /install/install_cmake_source.sh
 
@@ -56,7 +56,7 @@ RUN rm -rf build\
 RUN apt install libsparsehash-dev
 COPY 3rdparty/torchsparse /tmp/torchsparse
 WORKDIR /tmp/torchsparse
-RUN python3 setup.py install
+RUN pip3 install -e .
 
 # compile & install kineto
 COPY 3rdparty/kineto /tmp/kineto
@@ -77,7 +77,7 @@ RUN rm -rf build/\
     && make\
     && mkdir -p ~/.dgl\
     && mv libgraphiler.so ~/.dgl/
-RUN python3 setup.py install
+RUN pip3 install -e .
 
 # compile & install Sputnik
 COPY 3rdparty/sputnik /tmp/sputnik
