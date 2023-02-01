@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.6.1-cudnn8-devel-ubuntu20.04 as base
+FROM nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04 as base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -114,3 +114,13 @@ RUN rm -rf build/\
     && cmake ..\
     && make
 
+# download data
+WORKDIR /root
+COPY sparse-conv/download_data.sh /root/download_sparse_conv.sh
+RUN download_sparse_conv.sh
+COPY spmm/download_data.py /root/download_gnn_data.py
+RUN python3 download_gnn_data.py
+COPY rgcn/download_data.py /root/download_rgcn_data.py
+RUN python3 download_rgcn_data.py
+COPY prunned-bert/download_model.py /root/download_huggingface_model.py
+RUN python3 download_huggingface_model.py
