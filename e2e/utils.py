@@ -60,6 +60,10 @@ def get_dataset(dataset_name: str):
     DGLGraph
         The graph object.
     """
+    home = os.path.expanduser("~")
+    ogb_path = os.path.join(home, "ogb")
+    if not os.path.exists(ogb_path):
+        os.makedirs(ogb_path)
     if dataset_name == 'pubmed':
         pubmed = dgl.data.PubmedGraphDataset()
         g = pubmed[0].int()
@@ -88,15 +92,15 @@ def get_dataset(dataset_name: str):
         }
         return g, g.ndata['feat'], g.ndata['label'], split_idx, citeseer.num_labels
     elif dataset_name == 'arxiv':
-        arxiv = DglNodePropPredDataset(name='ogbn-arxiv')
+        arxiv = DglNodePropPredDataset(name='ogbn-arxiv', root=ogb_path)
         g = arxiv[0][0].int()
         return g, g.ndata['feat'], arxiv.labels.squeeze(-1), arxiv.get_idx_split(), arxiv.num_classes
     elif dataset_name == 'proteins':
-        proteins = DglNodePropPredDataset(name='ogbn-proteins')
+        proteins = DglNodePropPredDataset(name='ogbn-proteins', root=ogb_path)
         g = proteins[0][0].int()
         return g, g.ndata['feat'], proteins.labels.squeeze(-1), proteins.get_idx_split(), proteins.num_classes
     elif dataset_name == 'products':
-        products = DglNodePropPredDataset(name='ogbn-products')
+        products = DglNodePropPredDataset(name='ogbn-products', root=ogb_path)
         g = products[0][0].int()
         return g, g.ndata['feat'], products.labels.squeeze(-1), products.get_idx_split(), products.num_classes
     elif dataset_name == 'ppi':
