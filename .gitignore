@@ -3,3 +3,5 @@
 *.log
 *.csv
 .vscode/
+*.pyc
+__pycache__/

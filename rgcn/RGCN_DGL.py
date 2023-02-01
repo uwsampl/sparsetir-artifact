@@ -42,17 +42,19 @@ class RelGraphConvHetero(nn.Module):
         Dropout rate. Default: 0.0
     """
 
-    def __init__(self,
-                 in_feat,
-                 out_feat,
-                 rel_names,
-                 num_bases,
-                 *,
-                 weight=True,
-                 bias=True,
-                 activation=None,
-                 self_loop=False,
-                 dropout=0.0):
+    def __init__(
+        self,
+        in_feat,
+        out_feat,
+        rel_names,
+        num_bases,
+        *,
+        weight=True,
+        bias=True,
+        activation=None,
+        self_loop=False,
+        dropout=0.0
+    ):
         super(RelGraphConvHetero, self).__init__()
         self.in_feat = in_feat
         self.out_feat = out_feat
@@ -63,20 +65,28 @@ class RelGraphConvHetero(nn.Module):
         self.self_loop = self_loop
 
         self.conv = dglnn.HeteroGraphConv(
-            {rel: dglnn.GraphConv(in_feat, out_feat, norm='right', weight=False, bias=False)
-             for rel in rel_names})
+            {
+                rel: dglnn.GraphConv(
+                    in_feat, out_feat, norm="right", weight=False, bias=False
+                )
+                for rel in rel_names
+            }
+        )
 
         self.use_weight = weight
         self.use_basis = num_bases < len(self.rel_names) and weight
         if self.use_weight:
             if self.use_basis:
                 self.basis = dglnn.WeightBasis(
-                    (in_feat, out_feat), num_bases, len(self.rel_names))
+                    (in_feat, out_feat), num_bases, len(self.rel_names)
+                )
             else:
-                self.weight = nn.Parameter(torch.Tensor(
-                    len(self.rel_names), in_feat, out_feat))
+                self.weight = nn.Parameter(
+                    torch.Tensor(len(self.rel_names), in_feat, out_feat)
+                )
                 nn.init.xavier_uniform_(
-                    self.weight, gain=nn.init.calculate_gain('relu'))
+                    self.weight, gain=nn.init.calculate_gain("relu")
+                )
 
         # bias
         if bias:
@@ -87,7 +97,8 @@ class RelGraphConvHetero(nn.Module):
         if self.self_loop:
             self.loop_weight = nn.Parameter(torch.Tensor(in_feat, out_feat))
             nn.init.xavier_uniform_(
-                self.loop_weight, gain=nn.init.calculate_gain('relu'))
+                self.loop_weight, gain=nn.init.calculate_gain("relu")
+            )
 
         self.dropout = nn.Dropout(dropout)
 
@@ -107,15 +118,16 @@ class RelGraphConvHetero(nn.Module):
         g = g.local_var()
         if self.use_weight:
             weight = self.basis() if self.use_basis else self.weight
-            wdict = {self.rel_names[i]: {'weight': w.squeeze(
-                0)} for i, w in enumerate(torch.split(weight, 1, dim=0))}
+            wdict = {
+                self.rel_names[i]: {"weight": w.squeeze(0)}
+                for i, w in enumerate(torch.split(weight, 1, dim=0))
+            }
         else:
             wdict = {}
 
         if g.is_block:
             inputs_src = inputs
-            inputs_dst = {k: v[:g.number_of_dst_nodes(
-                k)] for k, v in inputs.items()}
+            inputs_dst = {k: v[: g.number_of_dst_nodes(k)] for k, v in inputs.items()}
         else:
             inputs_src = inputs_dst = inputs
 
@@ -136,10 +148,8 @@ class RelGraphConvHetero(nn.Module):
 class RGCN_DGL_hetero(nn.Module):
     def __init__(self, in_dim, hidden_dim, out_dim, rel_names, num_rels):
         super(RGCN_DGL_hetero, self).__init__()
-        self.layer1 = RelGraphConvHetero(
-            in_dim, hidden_dim, rel_names, num_rels)
-        self.layer2 = RelGraphConvHetero(
-            hidden_dim, out_dim, rel_names, num_rels)
+        self.layer1 = RelGraphConvHetero(in_dim, hidden_dim, rel_names, num_rels)
+        self.layer2 = RelGraphConvHetero(hidden_dim, out_dim, rel_names, num_rels)
 
     def forward(self, g, features):
         x = self.layer1(g, features)

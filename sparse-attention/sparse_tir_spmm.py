@@ -25,11 +25,7 @@ def bsrmm(
     feat_size: T.int32,
     num_heads: T.int32,
 ) -> None:
-    T.func_attr({
-        "global_symbol": "main",
-        "tir.noalias": True,
-        "sparse_tir_level": 2
-    })
+    T.func_attr({"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2})
     I = T.dense_fixed(nb)
     J = T.sparse_variable(I, (mb, nnzb), (indptr, indices), "int32")
     J_detach = T.dense_fixed(mb)
@@ -42,12 +38,12 @@ def bsrmm(
     C = T.match_sparse_buffer(c, (H, I, BI, F), "float16")
 
     with T.iter([H, I, BI, BJ, F, J], "SSSRSR", "bsrmm") as [
-            h,
-            i,
-            bi,
-            bj,
-            f,
-            j,
+        h,
+        i,
+        bi,
+        bj,
+        f,
+        j,
     ]:
         with T.init():
             C[h, i, bi, f] = T.float16(0.0)
@@ -55,91 +51,86 @@ def bsrmm(
 
 
 @T.prim_func
-def wmma_sync_desc(a_frag: T.handle, b_frag: T.handle,
-                   c_frag: T.handle) -> None:
-    A_frag = T.match_buffer(a_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=1,
-                            scope="wmma.matrix_a")
-    B_frag = T.match_buffer(b_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=1,
-                            scope="wmma.matrix_b")
-    C_frag = T.match_buffer(c_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=1,
-                            scope="wmma.accumulator")
+def wmma_sync_desc(a_frag: T.handle, b_frag: T.handle, c_frag: T.handle) -> None:
+    A_frag = T.match_buffer(
+        a_frag, (16, 16), "float16", align=128, offset_factor=1, scope="wmma.matrix_a"
+    )
+    B_frag = T.match_buffer(
+        b_frag, (16, 16), "float16", align=128, offset_factor=1, scope="wmma.matrix_b"
+    )
+    C_frag = T.match_buffer(
+        c_frag,
+        (16, 16),
+        "float16",
+        align=128,
+        offset_factor=1,
+        scope="wmma.accumulator",
+    )
 
     with T.block("root"):
         for i, j, k in T.grid(16, 16, 16):
             with T.block("update"):
                 vii, vjj, vkk = T.axis.remap("SSR", [i, j, k])
                 T.block_attr({"sparse": True})
-                C_frag[vii,
-                       vjj] = C_frag[vii,
-                                     vjj] + A_frag[vii, vkk] * B_frag[vkk, vjj]
+                C_frag[vii, vjj] = (
+                    C_frag[vii, vjj] + A_frag[vii, vkk] * B_frag[vkk, vjj]
+                )
 
 
 @T.prim_func
-def wmma_sync_impl(a_frag: T.handle, b_frag: T.handle,
-                   c_frag: T.handle) -> None:
-    A_frag = T.match_buffer(a_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.matrix_a")
-    B_frag = T.match_buffer(b_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.matrix_b")
-    C_frag = T.match_buffer(c_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.accumulator")
+def wmma_sync_impl(a_frag: T.handle, b_frag: T.handle, c_frag: T.handle) -> None:
+    A_frag = T.match_buffer(
+        a_frag, (16, 16), "float16", align=128, offset_factor=16, scope="wmma.matrix_a"
+    )
+    B_frag = T.match_buffer(
+        b_frag, (16, 16), "float16", align=128, offset_factor=16, scope="wmma.matrix_b"
+    )
+    C_frag = T.match_buffer(
+        c_frag,
+        (16, 16),
+        "float16",
+        align=128,
+        offset_factor=16,
+        scope="wmma.accumulator",
+    )
 
     with T.block("root"):
-        T.reads([
-            C_frag[0:16, 0:16],
-            A_frag[0:16, 0:16],
-            B_frag[0:16, 0:16],
-        ])
+        T.reads(
+            [
+                C_frag[0:16, 0:16],
+                A_frag[0:16, 0:16],
+                B_frag[0:16, 0:16],
+            ]
+        )
         T.writes(C_frag[0:16, 0:16])
         for tx in T.thread_binding(0, 32, "threadIdx.x"):
             T.evaluate(
                 T.tvm_mma_sync(
                     C_frag.data,
-                    C_frag.elem_offset // 256 +
-                    T.floordiv(T.floormod(C_frag.elem_offset, 256), 16),
+                    C_frag.elem_offset // 256
+                    + T.floordiv(T.floormod(C_frag.elem_offset, 256), 16),
                     A_frag.data,
-                    A_frag.elem_offset // 256 +
-                    T.floordiv(T.floormod(A_frag.elem_offset, 256), 16),
+                    A_frag.elem_offset // 256
+                    + T.floordiv(T.floormod(A_frag.elem_offset, 256), 16),
                     B_frag.data,
-                    B_frag.elem_offset // 256 +
-                    T.floordiv(T.floormod(B_frag.elem_offset, 256), 16),
+                    B_frag.elem_offset // 256
+                    + T.floordiv(T.floormod(B_frag.elem_offset, 256), 16),
                     C_frag.data,
-                    C_frag.elem_offset // 256 +
-                    T.floordiv(T.floormod(C_frag.elem_offset, 256), 16),
+                    C_frag.elem_offset // 256
+                    + T.floordiv(T.floormod(C_frag.elem_offset, 256), 16),
                     dtype="handle",
-                ))
+                )
+            )
 
 
 @T.prim_func
 def wmma_load_a_desc(a: T.handle, a_frag: T.handle) -> None:
-    A = T.match_buffer(a, (16, 16),
-                       "float16",
-                       align=128,
-                       offset_factor=16,
-                       scope="global")
-    A_frag = T.match_buffer(a_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.matrix_a")
+    A = T.match_buffer(
+        a, (16, 16), "float16", align=128, offset_factor=16, scope="global"
+    )
+    A_frag = T.match_buffer(
+        a_frag, (16, 16), "float16", align=128, offset_factor=16, scope="wmma.matrix_a"
+    )
 
     with T.block("root"):
         T.reads(A[0:16, 0:16])
@@ -154,17 +145,18 @@ def wmma_load_a_desc(a: T.handle, a_frag: T.handle) -> None:
 def wmma_load_a_impl(a: T.handle, a_frag: T.handle) -> None:
     s0 = T.var("int32")
     s1 = T.var("int32")
-    A = T.match_buffer(a, (16, 16),
-                       "float16",
-                       align=128,
-                       offset_factor=16,
-                       scope="global",
-                       strides=[s0, s1])
-    A_frag = T.match_buffer(a_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.matrix_a")
+    A = T.match_buffer(
+        a,
+        (16, 16),
+        "float16",
+        align=128,
+        offset_factor=16,
+        scope="global",
+        strides=[s0, s1],
+    )
+    A_frag = T.match_buffer(
+        a_frag, (16, 16), "float16", align=128, offset_factor=16, scope="wmma.matrix_a"
+    )
 
     with T.block("root"):
         T.reads(A[0:16, 0:16])
@@ -176,27 +168,24 @@ def wmma_load_a_impl(a: T.handle, a_frag: T.handle) -> None:
                     16,
                     16,
                     16,
-                    A_frag.elem_offset // 256 +
-                    T.floordiv(T.floormod(A_frag.elem_offset, 256), 16),
+                    A_frag.elem_offset // 256
+                    + T.floordiv(T.floormod(A_frag.elem_offset, 256), 16),
                     A.access_ptr("r"),
                     A.strides[0],
                     "row_major",
                     dtype="handle",
-                ))
+                )
+            )
 
 
 @T.prim_func
 def wmma_load_b_desc(b: T.handle, b_frag: T.handle) -> None:
-    B = T.match_buffer(b, (16, 16),
-                       "float16",
-                       align=128,
-                       offset_factor=16,
-                       scope="global")
-    B_frag = T.match_buffer(b_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.matrix_b")
+    B = T.match_buffer(
+        b, (16, 16), "float16", align=128, offset_factor=16, scope="global"
+    )
+    B_frag = T.match_buffer(
+        b_frag, (16, 16), "float16", align=128, offset_factor=16, scope="wmma.matrix_b"
+    )
     with T.block("root"):
         for i, j in T.grid(16, 16):
             with T.block("load"):
@@ -208,17 +197,18 @@ def wmma_load_b_desc(b: T.handle, b_frag: T.handle) -> None:
 def wmma_load_b_impl(b: T.handle, b_frag: T.handle) -> None:
     s0 = T.var("int32")
     s1 = T.var("int32")
-    B = T.match_buffer(b, (16, 16),
-                       "float16",
-                       align=128,
-                       offset_factor=16,
-                       scope="global",
-                       strides=[s0, s1])
-    B_frag = T.match_buffer(b_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.matrix_b")
+    B = T.match_buffer(
+        b,
+        (16, 16),
+        "float16",
+        align=128,
+        offset_factor=16,
+        scope="global",
+        strides=[s0, s1],
+    )
+    B_frag = T.match_buffer(
+        b_frag, (16, 16), "float16", align=128, offset_factor=16, scope="wmma.matrix_b"
+    )
     with T.block("root"):
         T.reads(B[0:16, 0:16])
         T.writes(B_frag[0:16, 0:16])
@@ -229,22 +219,26 @@ def wmma_load_b_impl(b: T.handle, b_frag: T.handle) -> None:
                     16,
                     16,
                     16,
-                    B_frag.elem_offset // 256 +
-                    T.floordiv(T.floormod(B_frag.elem_offset, 256), 16),
+                    B_frag.elem_offset // 256
+                    + T.floordiv(T.floormod(B_frag.elem_offset, 256), 16),
                     B.access_ptr("r"),
                     B.strides[0],
                     "row_major",
                     dtype="handle",
-                ))
+                )
+            )
 
 
 @T.prim_func
 def wmma_fill_desc(c_frag: T.handle) -> None:
-    C_frag = T.match_buffer(c_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.accumulator")
+    C_frag = T.match_buffer(
+        c_frag,
+        (16, 16),
+        "float16",
+        align=128,
+        offset_factor=16,
+        scope="wmma.accumulator",
+    )
     with T.block("root"):
         for i, j in T.grid(16, 16):
             with T.block("init"):
@@ -254,11 +248,14 @@ def wmma_fill_desc(c_frag: T.handle) -> None:
 
 @T.prim_func
 def wmma_fill_impl(c_frag: T.handle) -> None:
-    C_frag = T.match_buffer(c_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.accumulator")
+    C_frag = T.match_buffer(
+        c_frag,
+        (16, 16),
+        "float16",
+        align=128,
+        offset_factor=16,
+        scope="wmma.accumulator",
+    )
     with T.block("root"):
         T.reads([])
         T.writes(C_frag[0:16, 0:16])
@@ -269,25 +266,27 @@ def wmma_fill_impl(c_frag: T.handle) -> None:
                     16,
                     16,
                     16,
-                    C_frag.elem_offset // 256 +
-                    T.floordiv(T.floormod(C_frag.elem_offset, 256), 16),
+                    C_frag.elem_offset // 256
+                    + T.floordiv(T.floormod(C_frag.elem_offset, 256), 16),
                     T.float16(0),
                     dtype="handle",
-                ))
+                )
+            )
 
 
 @T.prim_func
 def wmma_store_desc(c_frag: T.handle, c: T.handle) -> None:
-    C_frag = T.match_buffer(c_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.accumulator")
-    C = T.match_buffer(c, (16, 16),
-                       "float16",
-                       align=128,
-                       offset_factor=16,
-                       scope="global")
+    C_frag = T.match_buffer(
+        c_frag,
+        (16, 16),
+        "float16",
+        align=128,
+        offset_factor=16,
+        scope="wmma.accumulator",
+    )
+    C = T.match_buffer(
+        c, (16, 16), "float16", align=128, offset_factor=16, scope="global"
+    )
     with T.block("root"):
         for i, j in T.grid(16, 16):
             with T.block("store"):
@@ -299,17 +298,23 @@ def wmma_store_desc(c_frag: T.handle, c: T.handle) -> None:
 def wmma_store_impl(c_frag: T.handle, c: T.handle) -> None:
     s0 = T.var("int32")
     s1 = T.var("int32")
-    C_frag = T.match_buffer(c_frag, (16, 16),
-                            "float16",
-                            align=128,
-                            offset_factor=16,
-                            scope="wmma.accumulator")
-    C = T.match_buffer(c, (16, 16),
-                       "float16",
-                       align=128,
-                       offset_factor=16,
-                       scope="global",
-                       strides=[s0, s1])
+    C_frag = T.match_buffer(
+        c_frag,
+        (16, 16),
+        "float16",
+        align=128,
+        offset_factor=16,
+        scope="wmma.accumulator",
+    )
+    C = T.match_buffer(
+        c,
+        (16, 16),
+        "float16",
+        align=128,
+        offset_factor=16,
+        scope="global",
+        strides=[s0, s1],
+    )
     with T.block("root"):
         T.reads(C_frag[0:16, 0:16])
         T.writes(C[0:16, 0:16])
@@ -320,13 +325,14 @@ def wmma_store_impl(c_frag: T.handle, c: T.handle) -> None:
                     16,
                     16,
                     16,
-                    C_frag.elem_offset // 256 +
-                    T.floordiv(T.floormod(C_frag.elem_offset, 256), 16),
+                    C_frag.elem_offset // 256
+                    + T.floordiv(T.floormod(C_frag.elem_offset, 256), 16),
                     C.access_ptr("w"),
                     C.strides[0],
                     "row_major",
                     dtype="handle",
-                ))
+                )
+            )
 
 
 WMMA_SYNC = tir.TensorIntrin.register(
@@ -361,14 +367,12 @@ WMMA_STORE = tir.TensorIntrin.register(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("SparseTIR sparse attention spmm")
-    parser.add_argument("--pattern",
-                        "-p",
-                        type=str,
-                        help="Sparse pattern: longformer/pixelfly")
-    parser.add_argument("--check",
-                        "-c",
-                        action="store_true",
-                        help="Whether to check result or not.")
+    parser.add_argument(
+        "--pattern", "-p", type=str, help="Sparse pattern: longformer/pixelfly"
+    )
+    parser.add_argument(
+        "--check", "-c", action="store_true", help="Whether to check result or not."
+    )
     block_size = 16
     nb = 256
     mb = 256
@@ -381,10 +385,9 @@ if __name__ == "__main__":
     if args.pattern == "pixelfly":
         A_block = create_pixelfly(1, mb, fmt="bsr")
     elif args.pattern == "longformer":
-        A_block = create_longformer(1, mb, 256 // block_size, fmt='bsr')
+        A_block = create_longformer(1, mb, 256 // block_size, fmt="bsr")
     else:
-        raise KeyError("Sparse pattern {} not recongized.".format(
-            args.pattern))
+        raise KeyError("Sparse pattern {} not recongized.".format(args.pattern))
     indptr = A_block.indptr
     indices = A_block.indices
     nnzb = A_block.nnz
@@ -392,19 +395,20 @@ if __name__ == "__main__":
     data = np.random.rand(num_heads, nnzb, block_size, block_size)
     x = np.random.rand(num_heads, m, feat_size).astype("float16")
     if args.check:
-        A = sp.bsr_matrix((data.astype("float16"), indices, indptr),
-                          shape=(n, m))
+        A = sp.bsr_matrix((data.astype("float16"), indices, indptr), shape=(n, m))
         y_ground_truth = (A * x).astype("float16")
 
     v_nb, v_mb, v_nnzb, v_blk, v_feat_size, v_num_heads = bsrmm.params[-6:]
-    bsrmm = bsrmm.specialize({
-        v_nb: nb,
-        v_mb: mb,
-        v_nnzb: nnzb,
-        v_blk: block_size,
-        v_feat_size: feat_size,
-        v_num_heads: num_heads
-    })
+    bsrmm = bsrmm.specialize(
+        {
+            v_nb: nb,
+            v_mb: mb,
+            v_nnzb: nnzb,
+            v_blk: block_size,
+            v_feat_size: feat_size,
+            v_num_heads: num_heads,
+        }
+    )
     sch = tvm.tir.Schedule(bsrmm)
     sp_iteration = sch.get_sparse_iteration("bsrmm")
     h, i, bi, bj, f, j = sch.get_sp_iters(sp_iteration)
@@ -448,12 +452,11 @@ if __name__ == "__main__":
     ctx = tvm.cuda(0)
     A_indptr = tvm.nd.array(np.copy(indptr).astype("int32"), device=ctx)
     A_indices = tvm.nd.array(np.copy(indices).astype("int32"), device=ctx)
-    A_data = tvm.nd.array(np.copy(data).reshape(-1).astype("float16"),
-                          device=ctx)
+    A_data = tvm.nd.array(np.copy(data).reshape(-1).astype("float16"), device=ctx)
     X_nd = tvm.nd.array(np.copy(x.reshape(-1)).astype("float16"), device=ctx)
-    Y_nd = tvm.nd.array(np.zeros((num_heads * nb * block_size * feat_size),
-                                 dtype="float16"),
-                        device=ctx)
+    Y_nd = tvm.nd.array(
+        np.zeros((num_heads * nb * block_size * feat_size), dtype="float16"), device=ctx
+    )
     fargs = [A_data, X_nd, Y_nd, A_indptr, A_indices]
     f(*fargs)
     if args.check:

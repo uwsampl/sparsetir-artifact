@@ -603,7 +603,7 @@ def rgcn_hetero_forward(m, n, num_rels, feat_in, feat_out):
             with T.init():
                 Y[i, fo] = T.float16(0)
             Y[i, fo] = Y[i, fo] + A[r, i, j] * WX[r, i, j, fo]
-    
+
     return func
 
 
@@ -695,9 +695,7 @@ def rgcn_tensorcore(
         m_sub, n_sub = g_sub.num_dst_nodes(), g_sub.num_src_nodes()
         indptr, indices, _ = g_sub.adj_sparse(fmt="csc")
         csf_indptr_0.append(csf_indptr_0[-1] + m_sub)
-        csf_indices_0.append(
-            th.arange(m_sub, dtype=th.int32)
-        )
+        csf_indices_0.append(th.arange(m_sub, dtype=th.int32))
         csf_indptr_1.append(csf_indptr_1[-1][-1] + indptr[1:])
         csf_indices_1.append(indices)
 

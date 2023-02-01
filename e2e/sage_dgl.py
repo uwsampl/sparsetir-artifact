@@ -12,10 +12,9 @@ from ogb.nodeproppred import DglNodePropPredDataset, Evaluator
 
 from utils import Logger, get_dataset
 
+
 class SAGEConv(nn.Module):
-    def __init__(self,
-                 in_feats,
-                 out_feats):
+    def __init__(self, in_feats, out_feats):
         super(SAGEConv, self).__init__()
 
         self._in_src_feats, self._in_dst_feats = expand_as_pair(in_feats)
@@ -26,7 +25,7 @@ class SAGEConv(nn.Module):
 
     def reset_parameters(self):
         """Reinitialize learnable parameters."""
-        gain = nn.init.calculate_gain('relu')
+        gain = nn.init.calculate_gain("relu")
         nn.init.xavier_uniform_(self.fc_self.weight, gain=gain)
         nn.init.xavier_uniform_(self.fc_neigh.weight, gain=gain)
 
@@ -58,20 +57,16 @@ class SAGEConv(nn.Module):
 
         h_self = feat_dst
 
-        graph.srcdata['h'] = feat_src
-        graph.update_all(fn.copy_src('h', 'm'), fn.mean('m', 'neigh'))
-        h_neigh = graph.dstdata['neigh']
+        graph.srcdata["h"] = feat_src
+        graph.update_all(fn.copy_src("h", "m"), fn.mean("m", "neigh"))
+        h_neigh = graph.dstdata["neigh"]
         rst = self.fc_self(h_self) + self.fc_neigh(h_neigh)
 
         return rst
 
+
 class GraphSAGE(nn.Module):
-    def __init__(self,
-                 in_feats,
-                 hidden_feats,
-                 out_feats,
-                 num_layers,
-                 dropout):
+    def __init__(self, in_feats, hidden_feats, out_feats, num_layers, dropout):
         super(GraphSAGE, self).__init__()
 
         self.layers = nn.ModuleList()
@@ -103,12 +98,13 @@ class GraphSAGE(nn.Module):
 
         return x.log_softmax(dim=-1)
 
+
 def train(dataset, model, g, feats, y_true, train_idx, optimizer):
     model.train()
 
     optimizer.zero_grad()
     out = model(g, feats)[train_idx]
-    if dataset == 'ppi':
+    if dataset == "ppi":
         loss = F.binary_cross_entropy_with_logits(out, y_true[train_idx])
     else:
         loss = F.nll_loss(out, y_true[train_idx])
@@ -119,19 +115,19 @@ def train(dataset, model, g, feats, y_true, train_idx, optimizer):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='GraphSAGE Full-Batch')
-    parser.add_argument('--dataset', type=str, default='arxiv')
-    parser.add_argument('--device', type=int, default=0)
-    parser.add_argument('--num_layers', type=int, default=3)
-    parser.add_argument('--hidden_channels', type=int, default=128)
-    parser.add_argument('--dropout', type=float, default=0.5)
-    parser.add_argument('--lr', type=float, default=0.01)
-    parser.add_argument('--epochs', type=int, default=500)
-    parser.add_argument('--runs', type=int, default=10)
+    parser = argparse.ArgumentParser(description="GraphSAGE Full-Batch")
+    parser.add_argument("--dataset", type=str, default="arxiv")
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--num_layers", type=int, default=3)
+    parser.add_argument("--hidden_channels", type=int, default=128)
+    parser.add_argument("--dropout", type=float, default=0.5)
+    parser.add_argument("--lr", type=float, default=0.01)
+    parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--runs", type=int, default=10)
     args = parser.parse_args()
     print(args)
 
-    device = f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu'
+    device = f"cuda:{args.device}" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
 
     # dataset = DglNodePropPredDataset(name='ogbn-arxiv')
@@ -139,13 +135,15 @@ def main():
     g = dgl.to_bidirected(g)
     g = g.int().to(device)
     feats, labels = feats.to(device), labels.to(device)
-    train_idx = split_idx['train'].to(device)
+    train_idx = split_idx["train"].to(device)
 
-    model = GraphSAGE(in_feats=feats.size(-1),
-                      hidden_feats=args.hidden_channels,
-                      out_feats=num_classes,
-                      num_layers=args.num_layers,
-                      dropout=args.dropout).to(device)
+    model = GraphSAGE(
+        in_feats=feats.size(-1),
+        hidden_feats=args.hidden_channels,
+        out_feats=num_classes,
+        num_layers=args.num_layers,
+        dropout=args.dropout,
+    ).to(device)
 
     logger = Logger(args.runs, args)
 
@@ -158,8 +156,8 @@ def main():
             loss = train(args.dataset, model, g, feats, labels, train_idx, optimizer)
             if epoch >= 3:
                 dur.append(time.time() - t0)
-                print('Training time/epoch {}'.format(np.mean(dur)))
+                print("Training time/epoch {}".format(np.mean(dur)))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -132,8 +132,8 @@ def test_rgcn(g: DGLHeteroGraph, feat_size: int):
 
 
 if __name__ == "__main__":
-    for feat_size in [16, 32]:#[4, 8, 16, 32, 64]:
-        for name in ['bgs']:#["aifb", "mutag", "bgs", "am"]:
+    for feat_size in [16, 32]:  # [4, 8, 16, 32, 64]:
+        for name in ["bgs"]:  # ["aifb", "mutag", "bgs", "am"]:
             print("dataset {}, feat_size={}:".format(name, feat_size))
             dataset = get_dataset_by_name(name)
             g = dataset[0]

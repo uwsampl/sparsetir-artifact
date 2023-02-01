@@ -5,13 +5,22 @@ import numpy as np
 import tvm
 import tvm.tir as tir
 from tvm.script import tir as T
-from tvm.sparse import lower_sparse_iter, lower_sparse_buffer, FormatRewriteRule, format_decompose, csf_to_ell3d
+from tvm.sparse import (
+    lower_sparse_iter,
+    lower_sparse_buffer,
+    FormatRewriteRule,
+    format_decompose,
+    csf_to_ell3d,
+)
 from torch.utils.dlpack import to_dlpack as th_to_dlpack
 from torch.utils.dlpack import from_dlpack as th_from_dlpack
 
 cached_kernel = None
 
-def rgcn_hetero_forward(m: int, n: int, num_rels: int, feat_in: int, feat_out: int, nnz_i: int, nnz_j: int):
+
+def rgcn_hetero_forward(
+    m: int, n: int, num_rels: int, feat_in: int, feat_out: int, nnz_i: int, nnz_j: int
+):
     @T.prim_func
     def func(
         a: T.handle,
@@ -23,7 +32,9 @@ def rgcn_hetero_forward(m: int, n: int, num_rels: int, feat_in: int, feat_out: i
         indptr_j: T.handle,
         indices_j: T.handle,
     ):
-        T.func_attr({"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2})
+        T.func_attr(
+            {"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2}
+        )
         R = T.dense_fixed(num_rels)
         I = T.sparse_variable(R, (m, nnz_i), (indptr_i, indices_i), "int32")
         J = T.sparse_variable(I, (n, nnz_j), (indptr_j, indices_j), "int32")
@@ -35,12 +46,19 @@ def rgcn_hetero_forward(m: int, n: int, num_rels: int, feat_in: int, feat_out: i
         W = T.match_sparse_buffer(w, (R, F_out, F_in), "float32")
         X = T.match_sparse_buffer(x, (J_detach, F_in), "float32")
         Y = T.match_sparse_buffer(y, (I_detach, F_out), "float32")
-        with T.iter([F_out, R, I, J, F_in], "SSSRR", "rgcn-hetero-forward") as [fo, r, i, j, fi]:
+        with T.iter([F_out, R, I, J, F_in], "SSSRR", "rgcn-hetero-forward") as [
+            fo,
+            r,
+            i,
+            j,
+            fi,
+        ]:
             with T.init():
                 Y[i, fo] = 0.0
             Y[i, fo] = Y[i, fo] + A[r, i, j] * W[r, fo, fi] * X[j, fi]
-    
+
     return func
+
 
 def ell3d(d0: int, d1: int, d2: int, nnz: int, nnz_rows: int, nnz_cols: int):
     @T.prim_func
@@ -59,6 +77,7 @@ def ell3d(d0: int, d1: int, d2: int, nnz: int, nnz_rows: int, nnz_cols: int):
 
     return func
 
+
 def rgcn_hetero_forward_tc(m, n, num_rels, feat_in, feat_out, dtype):
     @T.prim_func
     def func(
@@ -74,7 +93,9 @@ def rgcn_hetero_forward_tc(m, n, num_rels, feat_in, feat_out, dtype):
         nnz_i: T.int32,
         nnz_j: T.int32,
     ):
-        T.func_attr({"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2})
+        T.func_attr(
+            {"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2}
+        )
         R = T.dense_fixed(num_rels)
         I = T.sparse_variable(R, (m, nnz_i), (indptr_i, indices_i), "int32")
         J = T.sparse_variable(I, (n, nnz_j), (indptr_j, indices_j), "int32")
@@ -108,7 +129,14 @@ def rgcn_hetero_forward_tc(m, n, num_rels, feat_in, feat_out, dtype):
 
 
 def ell3d_fp16(
-    d0: int, d1: int, d2: int, nnz: int, nnz_rows: int, nnz_cols: int, feat_out: int, dtype: str
+    d0: int,
+    d1: int,
+    d2: int,
+    nnz: int,
+    nnz_rows: int,
+    nnz_cols: int,
+    feat_out: int,
+    dtype: str,
 ):
     @T.prim_func
     def func(
@@ -130,7 +158,6 @@ def ell3d_fp16(
     return func
 
 
-
 def prepare_hetero_graph_simplified(g):
     ntype_pointer = np.cumsum([0] + [g.number_of_nodes(ntype) for ntype in g.ntypes])
 
@@ -147,11 +174,11 @@ def prepare_hetero_graph_simplified(g):
 
 # V100
 config_dict = {
-    'aifb': (2, 32),
-    'mutag': (8, 256),
-    'bgs': (4, 256),
-    'biokg': (4, 512),
-    'am': (8, 512)
+    "aifb": (2, 32),
+    "mutag": (8, 256),
+    "bgs": (4, 256),
+    "biokg": (4, 512),
+    "am": (8, 512),
 }
 
 # GTX 3070
@@ -159,9 +186,10 @@ config_dict = {
 #     'aifb': (2, 32),
 #     'mutag': (4, 512),
 #     'bgs': (4, 256),
-#     'biokg': (4, 512), 
+#     'biokg': (4, 512),
 #     'am': (4, 1024),
 # }
+
 
 def simplify(script: tvm.tir.PrimFunc) -> tvm.tir.PrimFunc:
     return tvm.tir.transform.Simplify()(tvm.IRModule.from_expr(script))["main"]
@@ -205,7 +233,9 @@ def wmma_sync(d0: int, d1: int, dtype: str):
                     )
 
     @T.prim_func
-    def wmma_sync_16_1_desc(a_frag: T.handle, b_frag: T.handle, c_frag: T.handle) -> None:
+    def wmma_sync_16_1_desc(
+        a_frag: T.handle, b_frag: T.handle, c_frag: T.handle
+    ) -> None:
         A_frag = T.match_buffer(
             a_frag,
             (16, 1, 16),
@@ -241,7 +271,9 @@ def wmma_sync(d0: int, d1: int, dtype: str):
                     )
 
     @T.prim_func
-    def wmma_sync_1_16_desc(a_frag: T.handle, b_frag: T.handle, c_frag: T.handle) -> None:
+    def wmma_sync_1_16_desc(
+        a_frag: T.handle, b_frag: T.handle, c_frag: T.handle
+    ) -> None:
         A_frag = T.match_buffer(
             a_frag,
             (1, 16, 16),
@@ -342,7 +374,9 @@ def wmma_sync(d0: int, d1: int, dtype: str):
 def wmma_load_a(d0: int, d1: int, scope: str):
     @T.prim_func
     def wmma_load_a_desc(a: T.handle, a_frag: T.handle) -> None:
-        A = T.match_buffer(a, (d0, d1, 16), "float16", align=64, offset_factor=16, scope=scope)
+        A = T.match_buffer(
+            a, (d0, d1, 16), "float16", align=64, offset_factor=16, scope=scope
+        )
         A_frag = T.match_buffer(
             a_frag,
             (d0, d1, 16),
@@ -360,7 +394,9 @@ def wmma_load_a(d0: int, d1: int, scope: str):
 
     @T.prim_func
     def wmma_load_a_16_1_desc(a: T.handle, a_frag: T.handle) -> None:
-        A = T.match_buffer(a, (16, 1, 16), "float16", align=64, offset_factor=16, scope=scope)
+        A = T.match_buffer(
+            a, (16, 1, 16), "float16", align=64, offset_factor=16, scope=scope
+        )
         A_frag = T.match_buffer(
             a_frag,
             (16, 1, 16),
@@ -378,7 +414,9 @@ def wmma_load_a(d0: int, d1: int, scope: str):
 
     @T.prim_func
     def wmma_load_a_1_16_desc(a: T.handle, a_frag: T.handle) -> None:
-        A = T.match_buffer(a, (1, 16, 16), "float16", align=64, offset_factor=16, scope=scope)
+        A = T.match_buffer(
+            a, (1, 16, 16), "float16", align=64, offset_factor=16, scope=scope
+        )
         A_frag = T.match_buffer(
             a_frag,
             (1, 16, 16),
@@ -447,7 +485,9 @@ def wmma_load_a(d0: int, d1: int, scope: str):
 def wmma_load_b(scope: str):
     @T.prim_func
     def wmma_load_b_desc(b: T.handle, b_frag: T.handle) -> None:
-        B = T.match_buffer(b, (16, 16), "float16", align=64, offset_factor=16, scope=scope)
+        B = T.match_buffer(
+            b, (16, 16), "float16", align=64, offset_factor=16, scope=scope
+        )
         B_frag = T.match_buffer(
             b_frag,
             (16, 16),
@@ -600,7 +640,9 @@ def wmma_store(d0: int, d1: int, scope: str, dtype: str):
             offset_factor=16,
             scope="wmma.accumulator",
         )
-        C = T.match_buffer(c, (d0, d1, 16), dtype, align=64, offset_factor=16, scope=scope)
+        C = T.match_buffer(
+            c, (d0, d1, 16), dtype, align=64, offset_factor=16, scope=scope
+        )
         with T.block("root"):
             for io, ii, j in T.grid(d0, d1, 16):
                 with T.block("store"):
@@ -617,7 +659,9 @@ def wmma_store(d0: int, d1: int, scope: str, dtype: str):
             offset_factor=16,
             scope="wmma.accumulator",
         )
-        C = T.match_buffer(c, (16, 1, 16), dtype, align=64, offset_factor=16, scope=scope)
+        C = T.match_buffer(
+            c, (16, 1, 16), dtype, align=64, offset_factor=16, scope=scope
+        )
         with T.block("root"):
             for io, ii, j in T.grid(16, 1, 16):
                 with T.block("store"):
@@ -634,7 +678,9 @@ def wmma_store(d0: int, d1: int, scope: str, dtype: str):
             offset_factor=16,
             scope="wmma.accumulator",
         )
-        C = T.match_buffer(c, (1, 16, 16), dtype, align=64, offset_factor=16, scope=scope)
+        C = T.match_buffer(
+            c, (1, 16, 16), dtype, align=64, offset_factor=16, scope=scope
+        )
         with T.block("root"):
             for io, ii, j in T.grid(1, 16, 16):
                 with T.block("store"):
@@ -694,7 +740,9 @@ def convert_indptr_to_mid_array(indptr):
     indptr_numpy = indptr.numpy()
     ret = []
     for i in range(len(indptr_numpy) - 1):
-        ret.append(np.zeros((indptr_numpy[i + 1] - indptr_numpy[i],), dtype=np.int32) + i)
+        ret.append(
+            np.zeros((indptr_numpy[i + 1] - indptr_numpy[i],), dtype=np.int32) + i
+        )
     return np.concatenate(ret, axis=-1)
 
 
@@ -718,6 +766,7 @@ for bucket_size in [1, 2, 4, 8, 16]:
     tir.TensorIntrin.register(
         "wmma_{}_{}_sync".format(d0, d1), *wmma_sync(d0, d1, result_dtype)
     )
+
 
 def tc_csf_to_ell3d_inv_idx_map(r, io, ii, j, fo):
     return r, ii, j, fo
@@ -756,7 +805,9 @@ def create_tensorcores_kernel(g, dataset, W, in_feat, out_feat):
         m_sub, n_sub = g_sub.num_dst_nodes(), g_sub.num_src_nodes()
         indptr, indices, _ = g_sub.adj_sparse(fmt="csc")
         csf_indptr_0.append(csf_indptr_0[-1] + m_sub)
-        csf_indices_0.append(ntype_node_pointer[dst_type_id] + torch.arange(m_sub, dtype=torch.int32))
+        csf_indices_0.append(
+            ntype_node_pointer[dst_type_id] + torch.arange(m_sub, dtype=torch.int32)
+        )
         csf_indptr_1.append(csf_indptr_1[-1][-1] + indptr[1:])
         csf_indices_1.append(ntype_node_pointer[src_type_id] + indices)
 
@@ -806,19 +857,23 @@ def create_tensorcores_kernel(g, dataset, W, in_feat, out_feat):
             )
         )
     mod = tvm.IRModule.from_expr(
-        rgcn_hetero_forward_tc(m, n, num_rels, in_feat, out_feat, result_dtype).with_attr(
-            "horizontal_fuse", True
-        )
+        rgcn_hetero_forward_tc(
+            m, n, num_rels, in_feat, out_feat, result_dtype
+        ).with_attr("horizontal_fuse", True)
     )
     mod = format_decompose(mod, rewrites, include_format_rewrite_blks=False)
     mod = tvm.tir.transform.RemovePreprocess()(mod)
 
     sch = tir.Schedule(mod["main"])
     for bucket_id, _ in enumerate(buckets):
-        sp_iteration = sch.get_sparse_iteration("rgcn-hetero-forward_wx_{}".format(bucket_id))
+        sp_iteration = sch.get_sparse_iteration(
+            "rgcn-hetero-forward_wx_{}".format(bucket_id)
+        )
         r, io, ii, j, fo, fi = sch.get_sp_iters(sp_iteration)
         sch.sparse_fuse(sp_iteration, [r, io])
-        sp_iteration = sch.get_sparse_iteration("rgcn-hetero-forward_{}".format(bucket_id))
+        sp_iteration = sch.get_sparse_iteration(
+            "rgcn-hetero-forward_{}".format(bucket_id)
+        )
         r, io, ii, j, fo = sch.get_sp_iters(sp_iteration)
         sch.sparse_fuse(sp_iteration, [r, io])
     mod = lower_sparse_iter(sch.mod)
@@ -865,8 +920,12 @@ def create_tensorcores_kernel(g, dataset, W, in_feat, out_feat):
         sch.reverse_compute_at(Y_local, sch.get_loops(blk)[-3], True)
 
         # tensorize
-        sch.tensorize(sch.get_loops(WX_accum)[-3], "wmma_{}_{}_{}_store".format(d0, d1, "shared"))
-        sch.tensorize(sch.get_loops(X_wmma)[-3], "wmma_{}_{}_{}_load_a".format(d0, d1, "shared"))
+        sch.tensorize(
+            sch.get_loops(WX_accum)[-3], "wmma_{}_{}_{}_store".format(d0, d1, "shared")
+        )
+        sch.tensorize(
+            sch.get_loops(X_wmma)[-3], "wmma_{}_{}_{}_load_a".format(d0, d1, "shared")
+        )
         sch.tensorize(sch.get_loops(W_wmma)[-2], "wmma_{}_load_b".format("shared"))
         sch.tensorize(
             sch.get_loops(init_blk)[-3],
@@ -912,16 +971,24 @@ def create_tensorcores_kernel(g, dataset, W, in_feat, out_feat):
     f = tvm.build(mod["main"], target="cuda")
 
     W_nd = tvm.nd.from_dlpack(th_to_dlpack(W.half().view(-1).contiguous()))
-    double_buffer = [torch.zeros((g.num_dst_nodes(), out_feat), device=0) for _ in range(2)]
+    double_buffer = [
+        torch.zeros((g.num_dst_nodes(), out_feat), device=0) for _ in range(2)
+    ]
     counter = 0
     post_args = []
     dev = tvm.cuda(0)
     for bucket_id, _ in enumerate(buckets):
         post_args.append(
-            tvm.nd.array(mask[bucket_id].numpy().reshape(-1).astype(np.float16), device=dev)
+            tvm.nd.array(
+                mask[bucket_id].numpy().reshape(-1).astype(np.float16), device=dev
+            )
         )
-        post_args.append(tvm.nd.array(row_indices[bucket_id].numpy().reshape(-1), device=dev))
-        post_args.append(tvm.nd.array(col_indices[bucket_id].numpy().reshape(-1), device=dev))
+        post_args.append(
+            tvm.nd.array(row_indices[bucket_id].numpy().reshape(-1), device=dev)
+        )
+        post_args.append(
+            tvm.nd.array(col_indices[bucket_id].numpy().reshape(-1), device=dev)
+        )
     for bucket_id, _ in enumerate(buckets):
         post_args.append(tvm.nd.array(mids[bucket_id], device=dev))
 
@@ -938,7 +1005,6 @@ def create_tensorcores_kernel(g, dataset, W, in_feat, out_feat):
         return Y
 
     return foo
-
 
 
 def csf_to_ell3d_inv_idx_map(r, io, ii, j):
@@ -973,7 +1039,9 @@ def create_composable_kernel(g, dataset, W, in_feat, out_feat):
         m_sub, n_sub = g_sub.num_dst_nodes(), g_sub.num_src_nodes()
         indptr, indices, _ = g_sub.adj_sparse(fmt="csc")
         csf_indptr_0.append(csf_indptr_0[-1] + m_sub)
-        csf_indices_0.append(ntype_node_pointer[dst_type_id] + torch.arange(m_sub, dtype=torch.int32))
+        csf_indices_0.append(
+            ntype_node_pointer[dst_type_id] + torch.arange(m_sub, dtype=torch.int32)
+        )
         csf_indptr_1.append(csf_indptr_1[-1][-1] + indptr[1:])
         csf_indices_1.append(ntype_node_pointer[src_type_id] + indices)
 
@@ -1004,7 +1072,14 @@ def create_composable_kernel(g, dataset, W, in_feat, out_feat):
         rewrites.append(
             FormatRewriteRule(
                 str(bucket_id),
-                ell3d(num_rels, m, n, row_indices[bucket_id].shape[0], group_size // bucket_size, bucket_size),
+                ell3d(
+                    num_rels,
+                    m,
+                    n,
+                    row_indices[bucket_id].shape[0],
+                    group_size // bucket_size,
+                    bucket_size,
+                ),
                 ["A"],
                 ["R", "I", "J"],
                 ["R", "IO", "II", "J"],
@@ -1014,16 +1089,18 @@ def create_composable_kernel(g, dataset, W, in_feat, out_feat):
             )
         )
     mod = tvm.IRModule.from_expr(
-        rgcn_hetero_forward(
-            m, n, num_rels, in_feat, out_feat, 0, 0
-        ).with_attr("horizontal_fuse", True)
+        rgcn_hetero_forward(m, n, num_rels, in_feat, out_feat, 0, 0).with_attr(
+            "horizontal_fuse", True
+        )
     )
     mod = format_decompose(mod, rewrites)
     mod = tvm.tir.transform.RemovePreprocess()(mod)
 
     sch = tir.Schedule(mod["main"])
     for bucket_id, _ in enumerate(buckets):
-        sp_iteration = sch.get_sparse_iteration("rgcn-hetero-forward_{}".format(bucket_id))
+        sp_iteration = sch.get_sparse_iteration(
+            "rgcn-hetero-forward_{}".format(bucket_id)
+        )
         fo, r, io, ii, j, fi = sch.get_sp_iters(sp_iteration)
         sch.sparse_reorder(sp_iteration, [r, io, ii, j, fo, fi])
         sch.sparse_fuse(sp_iteration, [r, io])
@@ -1053,16 +1130,24 @@ def create_composable_kernel(g, dataset, W, in_feat, out_feat):
     f = tvm.build(mod["main"], target="cuda")
 
     W_nd = tvm.nd.from_dlpack(th_to_dlpack(W.view(-1).contiguous()))
-    double_buffer = [torch.zeros((g.num_dst_nodes(), out_feat), device=0) for _ in range(2)]
+    double_buffer = [
+        torch.zeros((g.num_dst_nodes(), out_feat), device=0) for _ in range(2)
+    ]
     counter = 0
     post_args = []
     dev = tvm.cuda(0)
     for bucket_id, _ in enumerate(buckets):
         post_args.append(
-            tvm.nd.array(mask[bucket_id].numpy().reshape(-1).astype(np.float32), device=dev)
+            tvm.nd.array(
+                mask[bucket_id].numpy().reshape(-1).astype(np.float32), device=dev
+            )
         )
-        post_args.append(tvm.nd.array(row_indices[bucket_id].numpy().reshape(-1), device=dev))
-        post_args.append(tvm.nd.array(col_indices[bucket_id].numpy().reshape(-1), device=dev))
+        post_args.append(
+            tvm.nd.array(row_indices[bucket_id].numpy().reshape(-1), device=dev)
+        )
+        post_args.append(
+            tvm.nd.array(col_indices[bucket_id].numpy().reshape(-1), device=dev)
+        )
     for bucket_id, _ in enumerate(buckets):
         post_args.append(tvm.nd.array(mids[bucket_id], device=dev))
 
@@ -1113,10 +1198,18 @@ def create_naive_kernel(g, dataset, W, in_feat, out_feat):
         indptr_j.append(indptr[unique_nodes + 1] + g.etype_pointer[etype_id])
         indices_j.append(indices + g.ntype_pointer[src_type_id])
 
-    indptr_i = tvm.nd.array(torch.cat(indptr_i).numpy().astype("int32"), device=tvm.cuda(0))
-    indices_i = tvm.nd.array(torch.cat(indices_i).numpy().astype("int32"), device=tvm.cuda(0))
-    indptr_j = tvm.nd.array(torch.cat(indptr_j).numpy().astype("int32"), device=tvm.cuda(0))
-    indices_j = tvm.nd.array(torch.cat(indices_j).numpy().astype("int32"), device=tvm.cuda(0))
+    indptr_i = tvm.nd.array(
+        torch.cat(indptr_i).numpy().astype("int32"), device=tvm.cuda(0)
+    )
+    indices_i = tvm.nd.array(
+        torch.cat(indices_i).numpy().astype("int32"), device=tvm.cuda(0)
+    )
+    indptr_j = tvm.nd.array(
+        torch.cat(indptr_j).numpy().astype("int32"), device=tvm.cuda(0)
+    )
+    indices_j = tvm.nd.array(
+        torch.cat(indices_j).numpy().astype("int32"), device=tvm.cuda(0)
+    )
 
     nnz_i = indices_i.shape[0]
     mod = tvm.IRModule.from_expr(
@@ -1151,7 +1244,9 @@ def create_naive_kernel(g, dataset, W, in_feat, out_feat):
     # print(f.imported_modules[0].get_source())
 
     W_nd = tvm.nd.from_dlpack(th_to_dlpack(W.view(-1).contiguous()))
-    double_buffer = [torch.zeros((g.num_dst_nodes(), out_feat), device=0) for _ in range(2)]
+    double_buffer = [
+        torch.zeros((g.num_dst_nodes(), out_feat), device=0) for _ in range(2)
+    ]
     counter = 0
 
     def foo(X):
@@ -1168,13 +1263,14 @@ def create_naive_kernel(g, dataset, W, in_feat, out_feat):
 
     return foo
 
+
 class RGCNSparseTIRNaiveLayer(nn.Module):
     def __init__(self, dataset, in_feat, out_feat, num_rels) -> None:
         super().__init__()
         self.dataset = dataset
         self.in_feat = in_feat
         self.out_feat = out_feat
-        dropout = 0.
+        dropout = 0.0
 
         self.dropout = nn.Dropout(dropout)
         self.W = nn.Parameter(torch.Tensor(num_rels, out_feat, in_feat))
@@ -1182,9 +1278,12 @@ class RGCNSparseTIRNaiveLayer(nn.Module):
 
     def forward(self, g, feat):
         if self.cached_kernel is None:
-            self.cached_kernel = create_naive_kernel(g, self.dataset, self.W.data, self.in_feat, self.out_feat)
+            self.cached_kernel = create_naive_kernel(
+                g, self.dataset, self.W.data, self.in_feat, self.out_feat
+            )
         h = self.cached_kernel(feat)
         return h
+
 
 class RGCNSparseTIRComposableLayer(nn.Module):
     def __init__(self, dataset, in_feat, out_feat, num_rels) -> None:
@@ -1192,7 +1291,7 @@ class RGCNSparseTIRComposableLayer(nn.Module):
         self.dataset = dataset
         self.in_feat = in_feat
         self.out_feat = out_feat
-        dropout = 0.
+        dropout = 0.0
 
         self.dropout = nn.Dropout(dropout)
         self.W = nn.Parameter(torch.Tensor(num_rels, out_feat, in_feat))
@@ -1200,9 +1299,12 @@ class RGCNSparseTIRComposableLayer(nn.Module):
 
     def forward(self, g, feat):
         if self.cached_kernel is None:
-            self.cached_kernel = create_composable_kernel(g, self.dataset, self.W.data, self.in_feat, self.out_feat)
+            self.cached_kernel = create_composable_kernel(
+                g, self.dataset, self.W.data, self.in_feat, self.out_feat
+            )
         h = self.cached_kernel(feat)
         return h
+
 
 class RGCNSparseTIRTensorCoresLayer(nn.Module):
     def __init__(self, dataset, in_feat, out_feat, num_rels) -> None:
@@ -1210,7 +1312,7 @@ class RGCNSparseTIRTensorCoresLayer(nn.Module):
         self.dataset = dataset
         self.in_feat = in_feat
         self.out_feat = out_feat
-        dropout = 0.
+        dropout = 0.0
 
         self.dropout = nn.Dropout(dropout)
         self.W = nn.Parameter(torch.Tensor(num_rels, out_feat, in_feat))
@@ -1218,10 +1320,11 @@ class RGCNSparseTIRTensorCoresLayer(nn.Module):
 
     def forward(self, g, feat):
         if self.cached_kernel is None:
-            self.cached_kernel = create_tensorcores_kernel(g, self.dataset, self.W.data, self.in_feat, self.out_feat)
+            self.cached_kernel = create_tensorcores_kernel(
+                g, self.dataset, self.W.data, self.in_feat, self.out_feat
+            )
         h = self.cached_kernel(feat)
         return h
-
 
 
 class RGCNSparseTIRNaive(nn.Module):
@@ -1235,22 +1338,32 @@ class RGCNSparseTIRNaive(nn.Module):
         x = self.layer2(g, x)
         return x
 
+
 class RGCNSparseTIRComposable(nn.Module):
     def __init__(self, dataset, in_dim, hidden_dim, out_dim, num_rels):
         super(RGCNSparseTIRComposable, self).__init__()
-        self.layer1 = RGCNSparseTIRComposableLayer(dataset, in_dim, hidden_dim, num_rels)
-        self.layer2 = RGCNSparseTIRComposableLayer(dataset, hidden_dim, out_dim, num_rels)
+        self.layer1 = RGCNSparseTIRComposableLayer(
+            dataset, in_dim, hidden_dim, num_rels
+        )
+        self.layer2 = RGCNSparseTIRComposableLayer(
+            dataset, hidden_dim, out_dim, num_rels
+        )
 
     def forward(self, g, features):
         x = F.relu(self.layer1(g, features))
         x = self.layer2(g, x)
         return x
 
+
 class RGCNSparseTIRTensorCores(nn.Module):
     def __init__(self, dataset, in_dim, hidden_dim, out_dim, num_rels):
         super(RGCNSparseTIRTensorCores, self).__init__()
-        self.layer1 = RGCNSparseTIRTensorCoresLayer(dataset, in_dim, hidden_dim, num_rels)
-        self.layer2 = RGCNSparseTIRTensorCoresLayer(dataset, hidden_dim, out_dim, num_rels)
+        self.layer1 = RGCNSparseTIRTensorCoresLayer(
+            dataset, in_dim, hidden_dim, num_rels
+        )
+        self.layer2 = RGCNSparseTIRTensorCoresLayer(
+            dataset, hidden_dim, out_dim, num_rels
+        )
 
     def forward(self, g, features):
         x = F.relu(self.layer1(g, features.half()))
