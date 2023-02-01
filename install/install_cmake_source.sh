@@ -20,8 +20,8 @@ set -e
 set -u
 set -o pipefail
 
-v=3.20
-version=3.20.0
+v=3.24
+version=3.24.0
 wget https://cmake.org/files/v${v}/cmake-${version}.tar.gz
 tar xvf cmake-${version}.tar.gz
 cd cmake-${version}
