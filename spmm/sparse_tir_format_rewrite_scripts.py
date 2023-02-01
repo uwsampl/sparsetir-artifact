@@ -47,7 +47,9 @@ def padding(
     pad_size: T.int32,
 ) -> None:
     I = T.dense_fixed(m)
-    JO = T.dense_variable(I, ((n + pad_size - 1) // pad_size, nnz_chunks), indptr, "int32")
+    JO = T.dense_variable(
+        I, ((n + pad_size - 1) // pad_size, nnz_chunks), indptr, "int32"
+    )
     JI = T.sparse_fixed(JO, (n, pad_size), indices, "int32")
     A = T.match_sparse_buffer(a, (I, JO, JI), "float32")
     T.evaluate(0)
@@ -127,7 +129,12 @@ def bsr_rewrite_with_preprocess(
     A_32 = T.match_sparse_buffer(a_32, [IO_32, JO_32, II_32, JI_32], dtype="float32")
     # body
     # with T.block("root")
-    with T.iter([IO_4, JO_4, II_4, JI_4], "SSSS", "rewrite_A_4") as [io_4, jo_4, ii_4, ji_4]:
+    with T.iter([IO_4, JO_4, II_4, JI_4], "SSSS", "rewrite_A_4") as [
+        io_4,
+        jo_4,
+        ii_4,
+        ji_4,
+    ]:
         T.iter_attr({"preprocess": True})
         A_4[io_4, jo_4, ii_4, ji_4] = A[io_4 * 4 + ii_4, jo_4 * 4 + ji_4]
     with T.iter([IO_16, JO_16, II_16, JI_16], "SSSS", "rewrite_A_16") as [
@@ -146,7 +153,13 @@ def bsr_rewrite_with_preprocess(
     ]:
         T.iter_attr({"preprocess": True})
         A_32[io_32, jo_32, ii_32, ji_32] = A[io_32 * 32 + ii_32, jo_32 * 32 + ji_32]
-    with T.iter([IO_4, II_4, JO_4, JI_4, K], "SSRRS", "csrmm_4") as [io_4, ii_4, jo_4, ji_4, k]:
+    with T.iter([IO_4, II_4, JO_4, JI_4, K], "SSRRS", "csrmm_4") as [
+        io_4,
+        ii_4,
+        jo_4,
+        ji_4,
+        k,
+    ]:
         with T.init():
             C[io_4 * 4 + ii_4, k] = T.float32(0)
         C[io_4 * 4 + ii_4, k] = (
@@ -162,7 +175,8 @@ def bsr_rewrite_with_preprocess(
         with T.init():
             C[io_16 * 16 + ii_16, k] = T.float32(0)
         C[io_16 * 16 + ii_16, k] = (
-            C[io_16 * 16 + ii_16, k] + A_16[io_16, jo_16, ii_16, ji_16] * B[jo_16 * 16 + ji_16, k]
+            C[io_16 * 16 + ii_16, k]
+            + A_16[io_16, jo_16, ii_16, ji_16] * B[jo_16 * 16 + ji_16, k]
         )
     with T.iter([IO_32, II_32, JO_32, JI_32, K], "SSRRS", "csrmm_32") as [
         io_32,
@@ -174,7 +188,8 @@ def bsr_rewrite_with_preprocess(
         with T.init():
             C[io_32 * 32 + ii_32, k] = T.float32(0)
         C[io_32 * 32 + ii_32, k] = (
-            C[io_32 * 32 + ii_32, k] + A_32[io_32, jo_32, ii_32, ji_32] * B[jo_32 * 32 + ji_32, k]
+            C[io_32 * 32 + ii_32, k]
+            + A_32[io_32, jo_32, ii_32, ji_32] * B[jo_32 * 32 + ji_32, k]
         )
 
 
@@ -252,19 +267,29 @@ def ell_rewrite_with_preprocess(
     I_8 = T.sparse_variable(O_8, (m_8, num_rows_8), (indptr_i_8, indices_i_8), "int32")
     J_8 = T.sparse_fixed(I_8, (n_8, 8), indices_j_8, "int32")
     O_16 = T.dense_fixed(1, "int32")
-    I_16 = T.sparse_variable(O_16, (m_16, num_rows_16), (indptr_i_16, indices_i_16), "int32")
+    I_16 = T.sparse_variable(
+        O_16, (m_16, num_rows_16), (indptr_i_16, indices_i_16), "int32"
+    )
     J_16 = T.sparse_fixed(I_16, (n_16, 16), indices_j_16, "int32")
     O_32 = T.dense_fixed(1, "int32")
-    I_32 = T.sparse_variable(O_32, (m_32, num_rows_32), (indptr_i_32, indices_i_32), "int32")
+    I_32 = T.sparse_variable(
+        O_32, (m_32, num_rows_32), (indptr_i_32, indices_i_32), "int32"
+    )
     J_32 = T.sparse_fixed(I_32, (n_32, 32), indices_j_32, "int32")
     O_64 = T.dense_fixed(1, "int32")
-    I_64 = T.sparse_variable(O_64, (m_64, num_rows_64), (indptr_i_64, indices_i_64), "int32")
+    I_64 = T.sparse_variable(
+        O_64, (m_64, num_rows_64), (indptr_i_64, indices_i_64), "int32"
+    )
     J_64 = T.sparse_fixed(I_64, (n_64, 64), indices_j_64, "int32")
     O_128 = T.dense_fixed(1, "int32")
-    I_128 = T.sparse_variable(O_128, (m_128, num_rows_128), (indptr_i_128, indices_i_128), "int32")
+    I_128 = T.sparse_variable(
+        O_128, (m_128, num_rows_128), (indptr_i_128, indices_i_128), "int32"
+    )
     J_128 = T.sparse_fixed(I_128, (n_128, 128), indices_j_128, "int32")
     O_512 = T.dense_fixed(1, "int32")
-    I_512 = T.sparse_variable(O_512, (m_512, num_rows_512), (indptr_i_512, indices_i_512), "int32")
+    I_512 = T.sparse_variable(
+        O_512, (m_512, num_rows_512), (indptr_i_512, indices_i_512), "int32"
+    )
     J_512 = T.sparse_fixed(I_512, (n_512, 512), indices_j_512, "int32")
     A = T.match_sparse_buffer(a, [I, J], dtype="float32")
     B = T.match_sparse_buffer(b, [J_detach, K], dtype="float32")
@@ -319,11 +344,21 @@ def ell_rewrite_with_preprocess(
         with T.init():
             C[i_64, k] = T.float32(0)
         C[i_64, k] = C[i_64, k] + A_64[o_64, i_64, j_64] * B[j_64, k]
-    with T.iter([O_128, I_128, J_128, K], "SSRS", "csrmm_128") as [o_128, i_128, j_128, k]:
+    with T.iter([O_128, I_128, J_128, K], "SSRS", "csrmm_128") as [
+        o_128,
+        i_128,
+        j_128,
+        k,
+    ]:
         with T.init():
             C[i_128, k] = T.float32(0)
         C[i_128, k] = C[i_128, k] + A_128[o_128, i_128, j_128] * B[j_128, k]
-    with T.iter([O_512, I_512, J_512, K], "SSRS", "csrmm_512") as [o_512, i_512, j_512, k]:
+    with T.iter([O_512, I_512, J_512, K], "SSRS", "csrmm_512") as [
+        o_512,
+        i_512,
+        j_512,
+        k,
+    ]:
         with T.init():
             C[i_512, k] = T.float32(0)
         C[i_512, k] = C[i_512, k] + A_512[o_512, i_512, j_512] * B[j_512, k]
@@ -354,7 +389,9 @@ def padding_rewrite_with_preprocess(
     J_detach = T.dense_fixed(n, "int32")
     K = T.dense_fixed(feat_size, "int32")
     I_32 = T.dense_fixed(m_32, "int32")
-    JO_32 = T.dense_variable(I_32, ((n_32 + 32 - 1) // 32, nnz_chunks_32), indptr_32, "int32")
+    JO_32 = T.dense_variable(
+        I_32, ((n_32 + 32 - 1) // 32, nnz_chunks_32), indptr_32, "int32"
+    )
     JI_32 = T.sparse_fixed(JO_32, (n_32, 32), indices_32, "int32")
     A = T.match_sparse_buffer(a, [I, J], dtype="float32")
     B = T.match_sparse_buffer(b, [J_detach, K], dtype="float32")

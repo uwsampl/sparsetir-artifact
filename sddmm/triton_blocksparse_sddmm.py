@@ -43,18 +43,22 @@ def test_matmul(MODE, TRANS_A, TRANS_B, BLOCK, DTYPE, Z=1, H=1, M=512, N=384, K=
     layout = torch.randint(2, (H, shape[0] // BLOCK, shape[1] // BLOCK))
 
     # create data
-    a_ref, a_tri = triton.testing.make_pair(a_shape, dtype=DTYPE, alpha=.1)
-    b_ref, b_tri = triton.testing.make_pair(b_shape, dtype=DTYPE, alpha=.1)
+    a_ref, a_tri = triton.testing.make_pair(a_shape, dtype=DTYPE, alpha=0.1)
+    b_ref, b_tri = triton.testing.make_pair(b_shape, dtype=DTYPE, alpha=0.1)
     # compute [torch]
     a_ref = do_mask(a_ref) if is_dsd else a_ref
     b_ref = do_mask(b_ref) if is_dds else b_ref
-    c_ref = torch.matmul(a_ref.transpose(2, 3) if TRANS_A else a_ref,
-                         b_ref.transpose(2, 3) if TRANS_B else b_ref)
+    c_ref = torch.matmul(
+        a_ref.transpose(2, 3) if TRANS_A else a_ref,
+        b_ref.transpose(2, 3) if TRANS_B else b_ref,
+    )
     c_ref = do_sparsify(c_ref) if is_sdd else c_ref
     # triton result
     a_tri = do_sparsify(a_tri) if is_dsd else a_tri
     b_tri = do_sparsify(b_tri) if is_dds else b_tri
-    op = triton.ops.blocksparse.matmul(layout, BLOCK, MODE, trans_a=TRANS_A, trans_b=TRANS_B, device="cuda")
+    op = triton.ops.blocksparse.matmul(
+        layout, BLOCK, MODE, trans_a=TRANS_A, trans_b=TRANS_B, device="cuda"
+    )
     c_tri = triton.testing.catch_oor(lambda: op(a_tri, b_tri), pytest)
     # compare
     triton.testing.assert_almost_equal(c_ref, c_tri)
@@ -67,8 +71,12 @@ def test_matmul(MODE, TRANS_A, TRANS_B, BLOCK, DTYPE, Z=1, H=1, M=512, N=384, K=
             op(a_tri, b_tri)
         if epoch >= cold_start:
             accum += timer.time
-    
-    print("triton-block-sddmm\tM\t{}\tN\t{}\tK\t{}\tblock\t{}\tdtype\t{}\ttrans_A\t{}\ttrans_B\t{}\ttime(ms)\t{}".format(M, N, K, BLOCK, DTYPE, TRANS_A, TRANS_B, accum / total))
+
+    print(
+        "triton-block-sddmm\tM\t{}\tN\t{}\tK\t{}\tblock\t{}\tdtype\t{}\ttrans_A\t{}\ttrans_B\t{}\ttime(ms)\t{}".format(
+            M, N, K, BLOCK, DTYPE, TRANS_A, TRANS_B, accum / total
+        )
+    )
 
 
 if __name__ == "__main__":
@@ -76,7 +84,15 @@ if __name__ == "__main__":
         for dtype in [torch.float32, torch.float16]:
             for trans_A in [False, True]:
                 for trans_B in [False, True]:
-                    test_matmul("sdd", trans_A, trans_B, block, dtype, Z=1, H=1, M=512, N=384, K=256)
-
-
-
+                    test_matmul(
+                        "sdd",
+                        trans_A,
+                        trans_B,
+                        block,
+                        dtype,
+                        Z=1,
+                        H=1,
+                        M=512,
+                        N=384,
+                        K=256,
+                    )

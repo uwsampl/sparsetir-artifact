@@ -11,13 +11,12 @@ def download_data():
     pubmed = dgl.data.PubmedGraphDataset()
     cora = dgl.data.CoraGraphDataset()
     citeseer = dgl.data.CiteseerGraphDataset()
-    arxiv = DglNodePropPredDataset(name='ogbn-arxiv', root=ogb_path)
-    proteins = DglNodePropPredDataset(name='ogbn-proteins', root=ogb_path)
-    products = DglNodePropPredDataset(name='ogbn-products', root=ogb_path)
+    arxiv = DglNodePropPredDataset(name="ogbn-arxiv", root=ogb_path)
+    proteins = DglNodePropPredDataset(name="ogbn-proteins", root=ogb_path)
+    products = DglNodePropPredDataset(name="ogbn-products", root=ogb_path)
     ppi = dgl.data.PPIDataset()
     reddit = dgl.data.RedditDataset()
 
 
 if __name__ == "__main__":
     download_data()
-

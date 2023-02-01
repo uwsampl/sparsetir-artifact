@@ -199,7 +199,7 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
     global kernels
     global kernel_args
     # The graph we profiled are undirected.
-    for forward in [True]: #[True, False]:
+    for forward in [True]:  # [True, False]:
         mat = g.adj(transpose=forward, scipy_fmt="csr")
         buckets = bucket_sizes * column_part
         m = mat.shape[0]
@@ -452,6 +452,7 @@ col_part = {
     "reddit": 8,
 }
 
+
 def main():
     parser = argparse.ArgumentParser(description="OGBN-Arxiv (GraphSAGE Full-Batch)")
     parser.add_argument("--dataset", type=str, default="arxiv")
@@ -473,9 +474,9 @@ def main():
     feats_ = torch.zeros([feats.shape[0], pad_length(feats.shape[1])])
     feats_[:, : feats.shape[1]] = feats
     feats = feats_
-    if args.dataset == 'ppi':
+    if args.dataset == "ppi":
         labels_ = torch.zeros([labels.shape[0], pad_length(num_classes)]).to(labels)
-        labels_[:, :labels.shape[1]] = labels
+        labels_[:, : labels.shape[1]] = labels
         labels = labels_
     g = dgl.to_bidirected(g)
     g = g.int().to(device)

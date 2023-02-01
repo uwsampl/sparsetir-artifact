@@ -1,7 +1,8 @@
 import torch
 import numpy as np
-#import matplotlib
-#from matplotlib import pyplot as plt
+
+# import matplotlib
+# from matplotlib import pyplot as plt
 from scipy.sparse import coo_matrix
 
 
@@ -31,15 +32,26 @@ def create_pixelfly(h, mb, fmt="mask", block_size=1):
         csr = coo.tocsr()
         return csr
     elif fmt == "csr":
-        rows = rows.view(-1, 1, 1) * block_size + torch.arange(block_size, dtype=torch.int32).view(1, block_size, 1) + torch.zeros(1, 1, block_size, dtype=torch.int32)
-        cols = cols.view(-1, 1, 1) * block_size + torch.zeros(1, block_size, 1, dtype=torch.int32) + torch.arange(block_size, dtype=torch.int32).view(1, 1, block_size)
+        rows = (
+            rows.view(-1, 1, 1) * block_size
+            + torch.arange(block_size, dtype=torch.int32).view(1, block_size, 1)
+            + torch.zeros(1, 1, block_size, dtype=torch.int32)
+        )
+        cols = (
+            cols.view(-1, 1, 1) * block_size
+            + torch.zeros(1, block_size, 1, dtype=torch.int32)
+            + torch.arange(block_size, dtype=torch.int32).view(1, 1, block_size)
+        )
         rows = rows.view(-1).numpy()
         cols = cols.view(-1).numpy()
-        coo = coo_matrix((np.ones_like(rows), (rows, cols)), shape=(mb * block_size, mb * block_size))
+        coo = coo_matrix(
+            (np.ones_like(rows), (rows, cols)), shape=(mb * block_size, mb * block_size)
+        )
         csr = coo.tocsr()
         return csr
     else:
         raise KeyError("Format {} not recognized.".format(fmt))
+
 
 def create_longformer(h, mb, window, fmt="mask", block_size=1):
     rows = []
@@ -64,11 +76,21 @@ def create_longformer(h, mb, window, fmt="mask", block_size=1):
         csr = coo.tocsr()
         return csr
     elif fmt == "csr":
-        rows = rows.view(-1, 1, 1) * block_size + torch.arange(block_size, dtype=torch.int32).view(1, block_size, 1) + torch.zeros(1, 1, block_size, dtype=torch.int32)
-        cols = cols.view(-1, 1, 1) * block_size + torch.zeros(1, block_size, 1, dtype=torch.int32) + torch.arange(block_size, dtype=torch.int32).view(1, 1, block_size)
+        rows = (
+            rows.view(-1, 1, 1) * block_size
+            + torch.arange(block_size, dtype=torch.int32).view(1, block_size, 1)
+            + torch.zeros(1, 1, block_size, dtype=torch.int32)
+        )
+        cols = (
+            cols.view(-1, 1, 1) * block_size
+            + torch.zeros(1, block_size, 1, dtype=torch.int32)
+            + torch.arange(block_size, dtype=torch.int32).view(1, 1, block_size)
+        )
         rows = rows.view(-1).numpy()
         cols = cols.view(-1).numpy()
-        coo = coo_matrix((np.ones_like(rows), (rows, cols)), shape=(mb * block_size, mb * block_size))
+        coo = coo_matrix(
+            (np.ones_like(rows), (rows, cols)), shape=(mb * block_size, mb * block_size)
+        )
         csr = coo.tocsr()
         return csr
     else:

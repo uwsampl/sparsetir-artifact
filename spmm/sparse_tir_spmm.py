@@ -65,6 +65,7 @@ def csr2ell_index_map(i, j):
 
 cached_bucketing_format = None
 
+
 def bench_hyb(
     g,
     x,
@@ -83,7 +84,10 @@ def bench_hyb(
     n = mat.shape[1]
     nnz = mat.nnz
     per_column_part_size = (n + column_part - 1) // column_part
-    sub_mats = [mat[:, i * per_column_part_size : (i + 1) * per_column_part_size] for i in range(column_part)]
+    sub_mats = [
+        mat[:, i * per_column_part_size : (i + 1) * per_column_part_size]
+        for i in range(column_part)
+    ]
 
     num_buckets = len(buckets)
     ell_n = []
@@ -94,13 +98,21 @@ def bench_hyb(
         in_degrees = sub_mat.indptr[1:] - sub_mat.indptr[:-1]
         for i, bucket_size in enumerate(bucket_sizes[:-1]):
             last_bucket_size = 0 if i == 0 else bucket_sizes[i - 1]
-            ell_n.append(int(((in_degrees > last_bucket_size) & (in_degrees <= bucket_size)).sum()))
+            ell_n.append(
+                int(
+                    (
+                        (in_degrees > last_bucket_size) & (in_degrees <= bucket_size)
+                    ).sum()
+                )
+            )
             if column_part == 1:
                 is_bucket_atomic.append(False)
             else:
                 is_bucket_atomic.append(True)
         sub_indegrees = in_degrees[in_degrees > bucket_sizes[-2]]
-        ell_n.append(int(((sub_indegrees + bucket_sizes[-1] - 1) // bucket_sizes[-1]).sum()))
+        ell_n.append(
+            int(((sub_indegrees + bucket_sizes[-1] - 1) // bucket_sizes[-1]).sum())
+        )
         is_bucket_atomic.append(True)
     print(ell_n)
     print(nnz / (sum([b * sub_nnz for b, sub_nnz in zip(buckets, ell_n)])))
@@ -193,32 +205,42 @@ def bench_hyb(
             for i, bucket_size in enumerate(bucket_sizes[:-1]):
                 last_bucket_size = 0 if i == 0 else bucket_sizes[i - 1]
                 ell_rows.append(
-                    ((in_degrees > last_bucket_size) & (in_degrees <= bucket_size)).nonzero()[0]
+                    (
+                        (in_degrees > last_bucket_size) & (in_degrees <= bucket_size)
+                    ).nonzero()[0]
                 )
             ell_rows.append((in_degrees > bucket_sizes[-2]).nonzero()[0])
 
             for i, bucket_size in enumerate(bucket_sizes[:-1]):
                 indices = np.zeros(
-                    (ell_n[partition * len(bucket_sizes) + i], bucket_size), dtype=np.int32
+                    (ell_n[partition * len(bucket_sizes) + i], bucket_size),
+                    dtype=np.int32,
                 )
                 a = np.zeros(
-                    (ell_n[partition * len(bucket_sizes) + i], bucket_size), dtype=np.float32
+                    (ell_n[partition * len(bucket_sizes) + i], bucket_size),
+                    dtype=np.float32,
                 )
                 for j, row_id in enumerate(ell_rows[partition * len(bucket_sizes) + i]):
                     row = sub_mat[row_id]
-                    indices[j, : row.nnz] = row.indices + partition * per_column_part_size
+                    indices[j, : row.nnz] = (
+                        row.indices + partition * per_column_part_size
+                    )
                     a[j, : row.nnz] = row.data
                 ell_indices.append(indices)
                 ell_a.append(a)
 
             # split rows for the last bucket
             indices = np.zeros(
-                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]), dtype=np.int32
+                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]),
+                dtype=np.int32,
             )
             a = np.zeros(
-                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]), dtype=np.float32
+                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]),
+                dtype=np.float32,
             )
-            new_rows = np.zeros((ell_n[(partition + 1) * len(bucket_sizes) - 1],), dtype=np.int32)
+            new_rows = np.zeros(
+                (ell_n[(partition + 1) * len(bucket_sizes) - 1],), dtype=np.int32
+            )
             bucket_size = bucket_sizes[-1]
             i = 0
             for row_id in ell_rows[-1]:
@@ -227,7 +249,8 @@ def bench_hyb(
                     if start_offset + bucket_size >= row.nnz:
                         # last bucket
                         indices[i, : row.nnz - start_offset] = (
-                            row.indices[start_offset:] + partition * per_column_part_size
+                            row.indices[start_offset:]
+                            + partition * per_column_part_size
                         )
                         a[i, : row.nnz - start_offset] = row.data[start_offset:]
                     else:
@@ -250,13 +273,19 @@ def bench_hyb(
         x.numpy().reshape(-1).astype("float32"),
         device=tvm.cuda(0),
     )
-    c_nd = tvm.nd.array(np.zeros((n * feat_size,)).astype("float32"), device=tvm.cuda(0))
+    c_nd = tvm.nd.array(
+        np.zeros((n * feat_size,)).astype("float32"), device=tvm.cuda(0)
+    )
     ell_indices_i_nd = []
     ell_a_nd = []
     ell_indices_j_nd = []
     for i in range(num_buckets):
-        ell_indices_i_nd.append(tvm.nd.array(ell_rows[i].astype("int32"), device=tvm.cuda(0)))
-        ell_a_nd.append(tvm.nd.array(ell_a[i].reshape(-1).astype("float32"), device=tvm.cuda(0)))
+        ell_indices_i_nd.append(
+            tvm.nd.array(ell_rows[i].astype("int32"), device=tvm.cuda(0))
+        )
+        ell_a_nd.append(
+            tvm.nd.array(ell_a[i].reshape(-1).astype("float32"), device=tvm.cuda(0))
+        )
         ell_indices_j_nd.append(
             tvm.nd.array(ell_indices[i].reshape(-1).astype("int32"), device=tvm.cuda(0))
         )
@@ -268,7 +297,9 @@ def bench_hyb(
 
     # test accuracy
     f(*args)
-    tvm.testing.assert_allclose(c_nd.numpy().reshape(-1, feat_size), y_golden.numpy(), rtol=1e-4)
+    tvm.testing.assert_allclose(
+        c_nd.numpy().reshape(-1, feat_size), y_golden.numpy(), rtol=1e-4
+    )
 
     # evaluate time
     evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=10)
@@ -309,7 +340,9 @@ def get_dataset(name: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("hybrid format spmm in sparse-tir")
-    parser.add_argument("--dataset", "-d", type=str, default='arxiv', help="dataset name")
+    parser.add_argument(
+        "--dataset", "-d", type=str, default="arxiv", help="dataset name"
+    )
     args = parser.parse_args()
     name = args.dataset
     g = get_dataset(name)
@@ -331,4 +364,3 @@ if __name__ == "__main__":
             )
         del cached_bucketing_format
         cached_bucketing_format = None
-

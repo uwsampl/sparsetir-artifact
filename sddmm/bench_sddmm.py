@@ -21,7 +21,9 @@ def sddmm(m: int, n: int, feat_size: int, nnz: int):
         indptr: T.handle,
         indices: T.handle,
     ) -> None:
-        T.func_attr({"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2})
+        T.func_attr(
+            {"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2}
+        )
         I = T.dense_fixed(m)
         J = T.sparse_variable(I, (n, nnz), (indptr, indices), "int32")
         J_detach = T.dense_fixed(n)
@@ -58,13 +60,14 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
     warmup = 10
     active = 100
     with profile(
-        activities=[ProfilerActivity.CUDA], schedule=schedule(wait=wait, warmup=warmup, active=active)
+        activities=[ProfilerActivity.CUDA],
+        schedule=schedule(wait=wait, warmup=warmup, active=active),
     ) as prof:
         with th.no_grad():
             for epoch in range(wait + warmup + active):
                 c_golden = dgl.ops.u_dot_v(g, a_gpu, b_gpu)
                 prof.step()
-    dur = sum([e.cuda_time for e in prof.events()]) / 1000 / active 
+    dur = sum([e.cuda_time for e in prof.events()]) / 1000 / active
     print("dgl time:\t{:.5f} ms".format(dur))
 
     # tvm
@@ -154,7 +157,9 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
                     # check result
                     args = [a_nd, b_nd, c_nd, indptr_nd, indices_nd, mid_nd]
                     f(*args)
-                    tvm.testing.assert_allclose(c_nd.numpy(), c_golden.view(-1).cpu(), rtol=1e-5)
+                    tvm.testing.assert_allclose(
+                        c_nd.numpy(), c_golden.view(-1).cpu(), rtol=1e-5
+                    )
 
                     # evaluate time
                     evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
@@ -194,7 +199,9 @@ def get_dataset(name: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("sddmm in sparse-tir")
-    parser.add_argument("--dataset", "-d", type=str, default="pubmed", help="dataset name")
+    parser.add_argument(
+        "--dataset", "-d", type=str, default="pubmed", help="dataset name"
+    )
     args = parser.parse_args()
     name = args.dataset
     g = get_dataset(name)
