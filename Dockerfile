@@ -114,13 +114,17 @@ RUN rm -rf build/\
     && cmake ..\
     && make
 
+# install ogb, rdflib, transformers
+RUN pip3 install ogb==1.3.5 rdflib==6.2.0 transformers==4.22.1
+
 # download data
 WORKDIR /root
-COPY sparse-conv/download_data.sh /root/download_sparse_conv.sh
-RUN download_sparse_conv.sh
-COPY spmm/download_data.py /root/download_gnn_data.py
-RUN python3 download_gnn_data.py
-COPY rgcn/download_data.py /root/download_rgcn_data.py
-RUN python3 download_rgcn_data.py
-COPY prunned-bert/download_model.py /root/download_huggingface_model.py
+COPY sparse-conv/download_data.sh download_sparse_conv.sh
+COPY spmm/download_data.py download_gnn_data.py
+COPY rgcn/download_data.py download_rgcn_data.py
+COPY prunned-bert/download_model.py download_huggingface_model.py
+
+RUN bash download_sparse_conv.sh
+RUN echo "y\ny\n" | python3 download_gnn_data.py
+RUN echo "y\n" | python3 download_rgcn_data.py
 RUN python3 download_huggingface_model.py
