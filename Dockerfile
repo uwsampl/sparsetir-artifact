@@ -85,7 +85,7 @@ WORKDIR /tmp/sputnik
 RUN rm -rf build\
     && mkdir build\
     && cd build/\
-    && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TEST=ON -DBUILD_BENCHMARK=ON -DCUDA_ARCHS="70;75"\
+    && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TEST=ON -DBUILD_BENCHMARK=ON -DCUDA_ARCHS="70;75;80;86"\
     && make -j\
     && make install
 
@@ -113,9 +113,6 @@ RUN rm -rf build/\
     && cd build/\
     && cmake ..\
     && make
-
-# install ogb, rdflib, transformers
-RUN pip3 install ogb==1.3.5 rdflib==6.2.0 transformers==4.22.1
 
 # download data
 WORKDIR /root

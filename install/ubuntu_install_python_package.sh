@@ -43,4 +43,9 @@ pip3 install --upgrade \
     junitparser==2.4.2 \
     six \
     tornado \
-    pytest-lazy-fixture
+    pytest-lazy-fixture \
+    pandas==1.4.4 \
+    ogb==1.3.5 \
+    rdflib==6.2.0 \
+    transformers==4.22.1
+
