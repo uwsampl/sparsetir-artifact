@@ -1,9 +1,9 @@
 from utils import create_pixelfly, create_longformer
 
-from torch.profiler import profile, ProfilerActivity, schedule
 import dgl
 import torch
 import argparse
+from sparsetir_profiler import profile_pytorch_ms
 
 
 def test_csr_spmm(pattern: str):
@@ -16,18 +16,8 @@ def test_csr_spmm(pattern: str):
     g = dgl.from_scipy(csr).int()
     g = g.to(0)
     x_gpu = torch.rand(4096, 64).to(0)
-    wait = 1
-    warmup = 10
-    active = 100
-    with profile(
-        activities=[ProfilerActivity.CUDA],
-        schedule=schedule(wait=wait, warmup=warmup, active=active),
-    ) as prof:
-        for _ in range(wait + warmup + active):
-            y_gpu = dgl.ops.copy_u_sum(g, x_gpu)
-            prof.step()
 
-    measure = sum([e.cuda_time for e in prof.events()]) / 1000 / active
+    measure = profile_pytorch_ms(lambda: dgl.ops.copy_u_sum(g, x_gpu))
     print("cusparse csrmm time: \t{:.5f}ms".format(measure))
     return measure
 

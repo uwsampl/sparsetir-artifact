@@ -9,6 +9,7 @@ from tvm.ir import IRModule
 from tqdm import tqdm
 from tvm.sparse import lower_sparse_iter, lower_sparse_buffer
 from utils import create_pixelfly, create_longformer
+from sparsetir_profiler import profile_tvm_ms
 
 
 @T.prim_func
@@ -466,5 +467,5 @@ if __name__ == "__main__":
             rtol=1e-2,
         )
 
-    evaluator = f.time_evaluator(f.entry_name, ctx, number=100)
-    print("avg time: {} ms".format(evaluator(*fargs).mean * 1000))
+    dur = profile_tvm_ms(f, fargs)
+    print("avg time: {} ms".format(dur))

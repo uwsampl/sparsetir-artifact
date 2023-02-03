@@ -15,7 +15,7 @@ import tvm.testing
 import tvm.tir as tir
 from tvm.script import tir as T
 from tvm.sparse import lower_sparse_buffer, lower_sparse_iter
-from torch.profiler import profile, ProfilerActivity, schedule
+from sparsetir_profiler import profile_pytorch_ms, profile_tvm_ms
 
 
 def bsrmm(mb, nb, nnz, blk, feat_size):
@@ -518,10 +518,9 @@ def bench_bsrmm(bsr_mat: Any, x: th.Tensor, block_size: int):
     args = [A_data, X_nd, Y_nd, A_indptr, A_indices]
     f(*args)
 
-    evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
-    avg_time = evaluator(*args).mean
-    print("bsrmm time: \t{:.5f}ms".format(avg_time * 1000))
-    return avg_time * 1000
+    avg_time = profile_tvm_ms(f, args)
+    print("bsrmm time: \t{:.5f}ms".format(avg_time))
+    return avg_time
 
 
 def bench_dbsrmm(bsr_mat: Any, x: th.Tensor, block_size: int):
@@ -605,24 +604,16 @@ def bench_dbsrmm(bsr_mat: Any, x: th.Tensor, block_size: int):
     args = [A_data, X_nd, Y_nd, row_indices_nd, A_indptr, A_indices]
     f(*args)
 
-    evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
-    avg_time = evaluator(*args).mean
-    print("dbsrmm time: \t{:.5f}ms".format(avg_time * 1000))
-    return avg_time * 1000
+    avg_time = profile_tvm_ms(f, args)
+    print("dbsrmm time: \t{:.5f}ms".format(avg_time))
+    return avg_time
 
 
 def bench_cublas(W: th.Tensor, X: th.Tensor):
     with th.no_grad():
         W = W.half().to(0)
         X = X.to(0)
-        with profile(
-            activities=[ProfilerActivity.CUDA],
-            schedule=schedule(wait=0, warmup=10, active=100),
-        ) as prof:
-            for _ in range(100):
-                Y = W @ X
-                prof.step()
-        measure = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
+        measure = profile_pytorch_ms(lambda: W @ X)
 
         print("cublas time: \t{:.5f}ms".format(measure))
         return measure
@@ -635,14 +626,7 @@ def bench_cusparse(csr: Any, X: th.Tensor):
     with th.no_grad():
         W = W.half().to(0)
         X = X.to(0)
-        with profile(
-            activities=[ProfilerActivity.CUDA],
-            schedule=schedule(wait=0, warmup=10, active=100),
-        ) as prof:
-            for _ in range(100):
-                Y = W @ X
-                prof.step()
-        measure = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
+        measure = profile_pytorch_ms(lambda: W @ X)
 
         print("cusparse time: \t{:.5f}ms".format(measure))
         return measure
@@ -680,15 +664,7 @@ def bench_triton(bsr: Any, X: th.Tensor, block_size: int):
     )
     c_tri = triton.testing.catch_oor(lambda: op(a_tri, b_tri), pytest)
 
-    with profile(
-        activities=[ProfilerActivity.CUDA],
-        schedule=schedule(wait=0, warmup=10, active=100),
-    ) as prof:
-        for _ in range(100):
-            op(a_tri, b_tri)
-            prof.step()
-
-    measure = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
+    measure = profile_pytorch_ms(op(a_tri, b_tri))
     print("triton time: \t{:.5f}ms".format(measure))
     return measure
 

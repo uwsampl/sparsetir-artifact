@@ -114,6 +114,11 @@ RUN rm -rf build/\
     && cmake ..\
     && make
 
+# install sparsetir_profiler
+COPY python/ /tmp/sparsetir_profiler
+WORKDIR /tmp/sparsetir_profiler
+RUN pip3 install -e .
+
 # download data
 WORKDIR /root
 COPY sparse-conv/download_data.sh download_sparse_conv.sh

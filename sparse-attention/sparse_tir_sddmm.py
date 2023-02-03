@@ -9,7 +9,7 @@ import numpy as np
 import torch as th
 import scipy.sparse as sp
 from utils import create_pixelfly, create_longformer
-from torch.profiler import profile, ProfilerActivity, schedule
+from sparsetir_profiler import profile_tvm_ms
 
 
 @T.prim_func
@@ -486,5 +486,5 @@ if __name__ == "__main__":
             rtol=1e-2,
         )
 
-    evaluator = f.time_evaluator(f.entry_name, ctx, number=100)
-    print("avg time: {} ms".format(evaluator(*fargs).mean * 1000))
+    dur = profile_tvm_ms(f, fargs)
+    print("avg time: {} ms".format(dur))

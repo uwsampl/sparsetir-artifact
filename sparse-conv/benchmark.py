@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import tvm
 from torchsparse.nn.functional.conv import ConvolutionFunction
-from torch.profiler import profile, ProfilerActivity, schedule
 from rgcn import rgcn_tensorcore
+from sparsetir_profiler import profile_pytorch_ms
 
 
 def get_type_pointers(g: dgl.DGLHeteroGraph):
@@ -49,28 +49,22 @@ for fpath in glob.glob("layers/*.pth"):
         torch.cuda.empty_cache()
         continue
 
-    with profile(
-        activities=[ProfilerActivity.CUDA],
-        schedule=schedule(wait=0, warmup=10, active=100),
-    ) as prof:
-        for _ in range(100):
-            y = ConvolutionFunction.apply(
-                inputs,
-                weights,
-                nbmaps,
-                nbsizes,
-                buffer,
-                (inputs.shape[0], outputs.shape[0]),
-                input_mask,
-                output_mask,
-                0.0,
-                0,
-                1,
-                transposed,
-            )
-            prof.step()
-
-    dur_torchsparse = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
+    dur_torchsparse = profile_pytorch_ms(
+        lambda: ConvolutionFunction.apply(
+            inputs,
+            weights,
+            nbmaps,
+            nbsizes,
+            buffer,
+            (inputs.shape[0], outputs.shape[0]),
+            input_mask,
+            output_mask,
+            0.0,
+            0,
+            1,
+            transposed,
+        )
+    )
 
     print("torchsparse time: \t{:5f}ms".format(dur_torchsparse))
 

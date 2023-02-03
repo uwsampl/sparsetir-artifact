@@ -42,19 +42,6 @@ def csrmm(
         C[i, k1, k2, k3] = C[i, k1, k2, k3] + A[i, j] * B[j, k1, k2, k3]
 
 
-class TorchOpTimer(object):
-    def __enter__(self):
-        self.start_event = th.cuda.Event(enable_timing=True)
-        self.end_event = th.cuda.Event(enable_timing=True)
-        self.start_event.record()
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.end_event.record()
-        th.cuda.synchronize()  # Wait for the events to be recorded!
-        self.time = self.start_event.elapsed_time(self.end_event) / 1e3
-
-
 def csr2ell_inv_index_map(o, i, j):
     return i, j
 

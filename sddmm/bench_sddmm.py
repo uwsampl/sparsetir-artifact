@@ -9,7 +9,7 @@ import torch as th
 from tvm.script import tir as T
 from tvm.sparse import lower_sparse_iter, lower_sparse_buffer
 from ogb.nodeproppred import DglNodePropPredDataset
-from torch.profiler import profile, ProfilerActivity, schedule
+from sparsetir_profiler import profile_tvm_ms, profile_pytorch_ms
 
 
 def sddmm(m: int, n: int, feat_size: int, nnz: int):
@@ -56,18 +56,7 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
     b_gpu = b.to(0)
     g = g.to(0)
 
-    wait = 1
-    warmup = 10
-    active = 100
-    with profile(
-        activities=[ProfilerActivity.CUDA],
-        schedule=schedule(wait=wait, warmup=warmup, active=active),
-    ) as prof:
-        with th.no_grad():
-            for epoch in range(wait + warmup + active):
-                c_golden = dgl.ops.u_dot_v(g, a_gpu, b_gpu)
-                prof.step()
-    dur = sum([e.cuda_time for e in prof.events()]) / 1000 / active
+    dur = profile_pytorch_ms(lambda: dgl.ops.u_dot_v(g, a_gpu, b_gpu))
     print("dgl time:\t{:.5f} ms".format(dur))
 
     # tvm
@@ -162,8 +151,7 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
                     )
 
                     # evaluate time
-                    evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
-                    mean_time = evaluator(*args).mean * 1000
+                    mean_time = profile_tvm_ms(f, args)
 
                     if mean_time < best:
                         best = mean_time

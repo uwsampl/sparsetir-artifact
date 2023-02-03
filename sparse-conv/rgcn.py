@@ -14,6 +14,7 @@ from tvm.sparse import (
     csf_to_ell3d,
 )
 from typing import List, Tuple, Mapping
+from sparsetir_profiler import profile_tvm_ms
 
 
 def wmma_sync(d0: int, d1: int):
@@ -885,7 +886,6 @@ def rgcn_tensorcore(
     answer = Y_nd.numpy()
 
     # evaluate time
-    evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=10)
-    measure = evaluator(*args).mean * 1000
+    measure = profile_tvm_ms(f, args)
     print("sparse-tir:\t\t{:.3f} ms".format(measure))
     return answer, measure

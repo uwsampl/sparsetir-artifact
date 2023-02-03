@@ -2,21 +2,8 @@ import pytest
 import torch
 import argparse
 import triton
-from torch.profiler import profile, ProfilerActivity, schedule
 from utils import create_pixelfly, create_longformer
-
-
-class TorchOpTimer(object):
-    def __enter__(self):
-        self.start_event = torch.cuda.Event(enable_timing=True)
-        self.end_event = torch.cuda.Event(enable_timing=True)
-        self.start_event.record()
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.end_event.record()
-        torch.cuda.synchronize()  # Wait for the events to be recorded!
-        self.time = self.start_event.elapsed_time(self.end_event)
+from sparsetir_profiler import profile_pytorch_ms
 
 
 def test_matmul(
@@ -72,15 +59,7 @@ def test_matmul(
         )
     )
 
-    with profile(
-        activities=[ProfilerActivity.CUDA],
-        schedule=schedule(wait=0, warmup=10, active=100),
-    ) as prof:
-        for _ in range(100):
-            op(a_tri, b_tri)
-            prof.step()
-
-    measure = sum([e.cuda_time for e in prof.events()]) / 1000 / 90
+    measure = profile_pytorch_ms(lambda: op(a_tri, b_tri))
     print("triton time: \t{:.5f}ms".format(measure))
     return measure
 
