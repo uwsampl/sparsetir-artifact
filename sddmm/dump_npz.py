@@ -7,7 +7,7 @@ from utils import get_graph
 if not os.path.exists("data"):
     os.mkdir("data")
 
-for dataset_name in ["arxiv", "pubmed", "ppi", "reddit", "proteins"]:
+for dataset_name in ["cora", "citeseer", "arxiv", "pubmed", "ppi", "reddit", "proteins"]:
     print("dumping dataset {}".format(dataset_name))
     g = get_graph(dataset_name)
     indptr, indices, _ = g.adj_sparse("csc")

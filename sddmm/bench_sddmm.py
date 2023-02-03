@@ -55,6 +55,7 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
     a_gpu = a.to(0)
     b_gpu = b.to(0)
     g = g.to(0)
+    c_golden = dgl.ops.u_dot_v(g, a_gpu, b_gpu)
 
     dur = profile_pytorch_ms(lambda: dgl.ops.u_dot_v(g, a_gpu, b_gpu))
     print("dgl time:\t{:.5f} ms".format(dur))

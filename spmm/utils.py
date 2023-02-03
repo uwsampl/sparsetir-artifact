@@ -1,10 +1,11 @@
 import dgl
+import os
 from ogb.nodeproppred import DglNodePropPredDataset
 
-__all__ = ["get_graph"]
+__all__ = ["get_dataset"]
 
 
-def get_graph(dataset_name: str):
+def get_dataset(dataset_name: str):
     """Return DGLGraph object from dataset name.
 
     Parameters
