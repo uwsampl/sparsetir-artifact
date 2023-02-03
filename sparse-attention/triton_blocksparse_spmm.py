@@ -60,7 +60,7 @@ def test_matmul(
     )
 
     measure = profile_pytorch_ms(lambda: op(a_tri, b_tri))
-    print("triton time: \t{:.5f}ms".format(measure))
+    print("triton time: \t{:.5f} ms".format(measure))
     return measure
 
 
