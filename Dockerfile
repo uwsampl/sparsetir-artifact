@@ -125,3 +125,6 @@ RUN bash download_sparse_conv.sh
 RUN echo "y\ny\n" | python3 download_gnn_data.py
 RUN echo "y\n" | python3 download_rgcn_data.py
 RUN python3 download_huggingface_model.py
+
+# install plotting softwares
+RUN apt-get install -y texlive-font-utils gnuplot
