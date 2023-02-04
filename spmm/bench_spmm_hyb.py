@@ -17,6 +17,7 @@
 
 import dgl
 import tvm
+import sys
 import tvm.testing
 import tvm.tir as tir
 import scipy.sparse as sp
@@ -65,14 +66,14 @@ def csrmm(
     n: T.int32,
     num_tiles: T.int32,
     nnz: T.int32,
-    cwm: T.int32,
+    coarsening_factor: T.int32,
 ) -> None:
     T.func_attr({"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2})
     I = T.dense_fixed(m)
     J = T.sparse_variable(I, (n, nnz), (indptr, indices), "int32")
     J_detach = T.dense_fixed(n)
     K1 = T.dense_fixed(num_tiles)
-    K2 = T.dense_fixed(cwm)
+    K2 = T.dense_fixed(coarsening_factor)
     K3 = T.dense_fixed(32)
     A = T.match_sparse_buffer(a, (I, J), "float32")
     B = T.match_sparse_buffer(b, (J_detach, K1, K2, K3), "float32")
@@ -269,15 +270,19 @@ if __name__ == "__main__":
 
     for feat_size in [32, 64, 128, 256, 512]:
         print("feat_size =", feat_size)
-        x = th.rand((g.num_src_nodes(), feat_size))
-        y_golden = dgl.ops.copy_u_sum(g, x)
-        bench_hyb(
-            g,
-            x,
-            y_golden,
-            feat_size=feat_size,
-            bucket_sizes=bucketing_config[name],
-            coarsening_factor=2,
-            num_col_parts=col_part_config[name],
-            use_implicit_unroll=args.implicit_unroll,
-        )
+        try:
+            x = th.rand((g.num_src_nodes(), feat_size))
+            y_golden = dgl.ops.copy_u_sum(g, x)
+            bench_hyb(
+                g,
+                x,
+                y_golden,
+                feat_size=feat_size,
+                bucket_sizes=bucketing_config[name],
+                coarsening_factor=2,
+                num_col_parts=col_part_config[name],
+                use_implicit_unroll=args.implicit_unroll,
+            )
+        except Exception as e:
+            print("OOM")
+            print(e, file=sys.stderr)

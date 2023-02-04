@@ -16,6 +16,7 @@
 # under the License.
 
 import dgl
+import sys
 import tvm
 import tvm.testing
 import tvm.tir as tir
@@ -42,14 +43,14 @@ def csrmm(
     n: T.int32,
     num_tiles: T.int32,
     nnz: T.int32,
-    cwm: T.int32,
+    coarsening_factor: T.int32,
 ) -> None:
     T.func_attr({"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2})
     I = T.dense_fixed(m)
     J = T.sparse_variable(I, (n, nnz), (indptr, indices), "int32")
     J_detach = T.dense_fixed(n)
     K1 = T.dense_fixed(num_tiles)
-    K2 = T.dense_fixed(cwm)
+    K2 = T.dense_fixed(coarsening_factor)
     K3 = T.dense_fixed(32)
     A = T.match_sparse_buffer(a, (I, J), "float32")
     B = T.match_sparse_buffer(b, (J_detach, K1, K2, K3), "float32")
@@ -65,23 +66,23 @@ def bench_naive(
     x,
     y_golden,
     feat_size=128,
-    cwm=2,
+    coarsening_factor=2,
 ):
     indptr, indices, _ = g.adj_sparse("csc")
     m = g.num_dst_nodes()
     n = g.num_src_nodes()
     nnz = g.num_edges()
     if feat_size < 64:
-        cwm = 1
+        coarsening_factor = 1
     mod = tvm.IRModule.from_expr(csrmm)
     # specialize
     params = mod["main"].params
     param_map = {
         params[5]: m,  # m
         params[6]: n,  # n
-        params[7]: feat_size // cwm // 32,  # num_tiles,
+        params[7]: feat_size // coarsening_factor // 32,  # num_tiles,
         params[8]: nnz,  # nnz
-        params[9]: cwm,  # cwm
+        params[9]: coarsening_factor,  # coarsening factor
     }
 
     mod["main"] = mod["main"].specialize(param_map)
@@ -130,12 +131,17 @@ if __name__ == "__main__":
 
     for feat_size in [32, 64, 128, 256, 512]:
         print("feat_size =", feat_size)
-        x = th.rand((g.num_src_nodes(), feat_size))
-        y_golden = dgl.ops.copy_u_sum(g, x)
-        bench_naive(
-            g,
-            x,
-            y_golden,
-            feat_size=feat_size,
-            cwm=2,
-        )
+        try:
+            x = th.rand((g.num_src_nodes(), feat_size))
+            y_golden = dgl.ops.copy_u_sum(g, x)
+            
+            bench_naive(
+                g,
+                x,
+                y_golden,
+                feat_size=feat_size,
+                coarsening_factor=2,
+            )
+        except Exception as e:
+            print("OOM")
+            print(e, file=sys.stderr)
