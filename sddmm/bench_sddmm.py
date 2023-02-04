@@ -10,6 +10,7 @@ from tvm.script import tir as T
 from tvm.sparse import lower_sparse_iter, lower_sparse_buffer
 from ogb.nodeproppred import DglNodePropPredDataset
 from sparsetir_profiler import profile_tvm_ms, profile_pytorch_ms
+from utils import get_dataset
 
 
 def sddmm(m: int, n: int, feat_size: int, nnz: int):
@@ -159,31 +160,6 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
                         best_config = (tx, ty, vec_size, group_size)
     print("sparse tir:\t{:.5f} ms".format(best))
     print("best config:\t{}".format(best_config))
-
-
-def get_dataset(name: str):
-    if name == "arxiv":
-        arxiv = DglNodePropPredDataset(name="ogbn-arxiv")
-        g = arxiv[0][0]
-    elif name == "proteins":
-        proteins = DglNodePropPredDataset(name="ogbn-proteins")
-        g = proteins[0][0]
-    elif name == "cora":
-        pubmed = dgl.data.CoraGraphDataset()
-        g = pubmed[0]
-    elif name == "citeseer":
-        pubmed = dgl.data.CiteseerGraphDataset()
-        g = pubmed[0]
-    elif name == "ppi":
-        ppi = dgl.data.PPIDataset()
-        g = dgl.batch(ppi)
-    elif name == "reddit":
-        reddit = dgl.data.RedditDataset()
-        g = reddit[0]
-    else:
-        raise KeyError("Unknown dataset {}.".format(name))
-    g = dgl.graph(g.edges("uv", "srcdst"), num_nodes=g.num_nodes())
-    return g.int()
 
 
 if __name__ == "__main__":
