@@ -15,13 +15,13 @@ do
   for feat_size in 32 64 128 256 512
   do
     # dgsparse
-    echo "Running dgsparse SpMM on ${dataset}"
+    echo "Running dgsparse SpMM on ${dataset}, feat_size = ${feat_size}"
     dgsparse-gespmm data/${dataset}.npz ${feat_size} > dgsparse_${dataset}_${feat_size}.log 2>> dgsparse_${dataset}_${feat_size}.log
     # sputnik
-    echo "Running sputnik SpMM on ${dataset}"
+    echo "Running sputnik SpMM on ${dataset}, feat_size = ${feat_size}"
     sputnik_spmm_benchmark data/${dataset}.npz ${feat_size} > sputnik_${dataset}_${feat_size}.log
     # taco
-    echo "Running TACO SpMM on ${dataset}"
-    taco_spmm data/${dataset}.npz ${feat_size} > taco_${dataset}_${feat_size}.log
+    echo "Running TACO SpMM on ${dataset}, feat_size = ${feat_size}"
+    taco-spmm data/${dataset}.npz ${feat_size} > taco_${dataset}_${feat_size}.log
   done
 done

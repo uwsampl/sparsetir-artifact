@@ -1,4 +1,5 @@
 import dgl
+import sys
 import tvm
 import argparse
 import tvm.testing
@@ -159,7 +160,6 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
                         best = mean_time
                         best_config = (tx, ty, vec_size, group_size)
     print("sparse tir:\t{:.5f} ms".format(best))
-    print("best config:\t{}".format(best_config))
 
 
 if __name__ == "__main__":
@@ -171,4 +171,10 @@ if __name__ == "__main__":
     name = args.dataset
     g = get_dataset(name)
     for feat_size in [32, 64, 128, 256, 512]:
-        bench_sddmm(g, feat_size)
+        print("feat_size = ", feat_size)
+        try:
+            bench_sddmm(g, feat_size)
+        except Exception as e:
+            print("OOM")
+            print(e, file=sys.stderr)
+
