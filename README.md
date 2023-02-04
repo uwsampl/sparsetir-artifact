@@ -14,13 +14,9 @@ cd sparsetir-artifact
 ```
 ## Build Docker Container
 
-```bash
-docker build -t sparsetir-artifact .
-```
-
 Before building the artifact, user need to select nvidia runtime to enable GPU access when buildling docker containers ([reference](https://github.com/NVIDIA/nvidia-docker/wiki/Advanced-topics#default-runtime)),
 by editing the file `/etc/docker/daemon.json` with content:
-```
+```json
 {
     "runtimes": {
         "nvidia": {
@@ -32,8 +28,14 @@ by editing the file `/etc/docker/daemon.json` with content:
 }
 ```
 then restart docker daemonn:
-```
+```bash
 sudo systemctl restart docker
+```
+
+
+After these steps, user can run the following command to build docker container:
+```bash
+docker build -t sparsetir-artifact .
 ```
 
 ## Run experiments
