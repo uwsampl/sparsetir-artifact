@@ -6,7 +6,8 @@
 	url = git@github.com:yzh119/triton.git
 [submodule "3rdparty/taco"]
 	path = 3rdparty/taco
-	url = git@github.com:MasterJH5574/taco.git
+	url = git@github.com:yzh119/taco.git
+	branch = sparsetir-eval
 [submodule "3rdparty/sputnik"]
 	path = 3rdparty/sputnik
 	url = git@github.com:yzh119/sputnik.git
