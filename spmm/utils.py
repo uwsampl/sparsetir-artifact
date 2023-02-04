@@ -48,4 +48,5 @@ def get_dataset(dataset_name: str):
         reddit = dgl.data.RedditDataset()
         return reddit[0].int()
     else:
-        pass
+        raise KeyError("Unknown dataset: {}".format(dataset_name))
+

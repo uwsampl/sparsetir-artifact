@@ -30,6 +30,7 @@ def profile_pytorch_ms(f: Callable[[], None]) -> float:
     cache = torch.empty(int(256e6), dtype=torch.int8, device="cuda")
     start_event = [torch.cuda.Event(enable_timing=True) for i in range(n_repeat)]
     end_event = [torch.cuda.Event(enable_timing=True) for i in range(n_repeat)]
+    torch.cuda.synchronize()
     # Warm-up
     for _ in range(n_warmup):
         f()

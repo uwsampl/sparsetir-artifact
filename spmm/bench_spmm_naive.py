@@ -60,7 +60,7 @@ def csrmm(
         C[i, k1, k2, k3] = C[i, k1, k2, k3] + A[i, j] * B[j, k1, k2, k3]
 
 
-def bench_hyb(
+def bench_naive(
     g,
     x,
     y_golden,
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         print("feat_size =", feat_size)
         x = th.rand((g.num_src_nodes(), feat_size))
         y_golden = dgl.ops.copy_u_sum(g, x)
-        bench_hyb(
+        bench_naive(
             g,
             x,
             y_golden,

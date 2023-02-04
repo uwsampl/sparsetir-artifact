@@ -11,12 +11,12 @@ import torch.nn.functional as F
 from torch.utils.dlpack import to_dlpack as th_to_dlpack
 from torch.utils.dlpack import from_dlpack as th_from_dlpack
 
-from utils import Logger, get_dataset
+from utils import get_dataset
 import tvm
 import tvm.testing
 import tvm.tir as tir
 from tvm.script import tir as T
-from tvm.sparse import FormatRewriteRule, lower_sparse_buffer, lower_sparse_iter
+from tvm.sparse import FormatRewriteRule, lower_sparse_buffer, lower_sparse_iter, column_part_hyb, format_decompose
 
 
 @T.prim_func
@@ -194,173 +194,70 @@ def train(dataset, model, feats, y_true, train_idx, optimizer):
     return loss.item()
 
 
-def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
-    print(feat_sizes)
+def create_kernels(g, feat_sizes, bucket_sizes=[], num_col_parts=1):
     global kernels
     global kernel_args
-    # The graph we profiled are undirected.
-    for forward in [True]:  # [True, False]:
-        mat = g.adj(transpose=forward, scipy_fmt="csr")
-        buckets = bucket_sizes * column_part
-        m = mat.shape[0]
-        n = mat.shape[1]
-        nnz = mat.nnz
-        per_column_part_size = (n + column_part - 1) // column_part
-        sub_mats = [
-            mat[:, i * per_column_part_size : (i + 1) * per_column_part_size]
-            for i in range(column_part)
-        ]
+    use_implicit_unroll = True
 
-        num_buckets = len(buckets)
-        ell_n = []
-        is_bucket_atomic = []
+    for forward in [True]: # [True, False]
 
-        for partition in range(column_part):
-            sub_mat = sub_mats[partition]
-            in_degrees = sub_mat.indptr[1:] - sub_mat.indptr[:-1]
-            for i, bucket_size in enumerate(bucket_sizes[:-1]):
-                last_bucket_size = 0 if i == 0 else bucket_sizes[i - 1]
-                ell_n.append(
-                    int(
-                        (
-                            (in_degrees > last_bucket_size)
-                            & (in_degrees <= bucket_size)
-                        ).sum()
-                    )
-                )
-                if column_part == 1:
-                    is_bucket_atomic.append(False)
-                else:
-                    is_bucket_atomic.append(True)
-            sub_indegrees = in_degrees[in_degrees > bucket_sizes[-2]]
-            ell_n.append(
-                int(((sub_indegrees + bucket_sizes[-1] - 1) // bucket_sizes[-1]).sum())
-            )
-            is_bucket_atomic.append(True)
-        print(ell_n)
-        print(nnz / (sum([b * sub_nnz for b, sub_nnz in zip(buckets, ell_n)])))
-
-        ell_rows = []
-        ell_indices = []
-        ell_a = []
-
-        for partition in range(column_part):
-            sub_mat = sub_mats[partition]
-            in_degrees = sub_mat.indptr[1:] - sub_mat.indptr[:-1]
-
-            for i, bucket_size in enumerate(bucket_sizes[:-1]):
-                last_bucket_size = 0 if i == 0 else bucket_sizes[i - 1]
-                ell_rows.append(
-                    (
-                        (in_degrees > last_bucket_size) & (in_degrees <= bucket_size)
-                    ).nonzero()[0]
-                )
-            ell_rows.append((in_degrees > bucket_sizes[-2]).nonzero()[0])
-
-            for i, bucket_size in enumerate(bucket_sizes[:-1]):
-                indices = np.zeros(
-                    (ell_n[partition * len(bucket_sizes) + i], bucket_size),
-                    dtype=np.int32,
-                )
-                a = np.zeros(
-                    (ell_n[partition * len(bucket_sizes) + i], bucket_size),
-                    dtype=np.float32,
-                )
-                for j, row_id in enumerate(ell_rows[partition * len(bucket_sizes) + i]):
-                    row = sub_mat[row_id]
-                    indices[j, : row.nnz] = (
-                        row.indices + partition * per_column_part_size
-                    )
-                    a[j, : row.nnz] = row.data
-                ell_indices.append(indices)
-                ell_a.append(a)
-
-            # split rows for the last bucket
-            indices = np.zeros(
-                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]),
-                dtype=np.int32,
-            )
-            a = np.zeros(
-                (ell_n[(partition + 1) * len(bucket_sizes) - 1], bucket_sizes[-1]),
-                dtype=np.float32,
-            )
-            new_rows = np.zeros(
-                (ell_n[(partition + 1) * len(bucket_sizes) - 1],), dtype=np.int32
-            )
-            bucket_size = bucket_sizes[-1]
-            i = 0
-            for row_id in ell_rows[-1]:
-                row = sub_mat[row_id]
-                for start_offset in range(0, row.nnz, bucket_size):
-                    if start_offset + bucket_size >= row.nnz:
-                        # last bucket
-                        indices[i, : row.nnz - start_offset] = (
-                            row.indices[start_offset:]
-                            + partition * per_column_part_size
-                        )
-                        a[i, : row.nnz - start_offset] = row.data[start_offset:]
-                    else:
-                        indices[i] = (
-                            row.indices[start_offset : start_offset + bucket_size]
-                            + partition * per_column_part_size
-                        )
-                        a[i].fill(1)
-                    new_rows[i] = row_id
-                    i += 1
-
-            ell_indices.append(indices)
-            ell_a.append(a)
-            ell_rows[-1] = new_rows
+        num_buckets = len(bucket_sizes)
+        indptr, indices, _ = g.adj_sparse("csc")
+        m = g.num_dst_nodes()
+        n = g.num_src_nodes()
+        nnz = g.num_edges()
+        indptr_nd = tvm.nd.array(indptr.cpu().numpy(), device=tvm.cpu())
+        indices_nd = tvm.nd.array(indices.cpu().numpy(), device=tvm.cpu())
+        row_indices, col_indices, mask = column_part_hyb(
+            m, n, indptr_nd, indices_nd, num_col_parts, bucket_sizes
+        )
 
         # prepare nd array
-        ell_indices_i_nd = []
-        ell_a_nd = []
-        ell_indices_j_nd = []
-        for i in range(num_buckets):
-            ell_indices_i_nd.append(
-                tvm.nd.array(ell_rows[i].astype("int32"), device=tvm.cuda(0))
-            )
-            ell_a_nd.append(
-                tvm.nd.array(ell_a[i].reshape(-1).astype("float32"), device=tvm.cuda(0))
-            )
-            ell_indices_j_nd.append(
-                tvm.nd.array(
-                    ell_indices[i].reshape(-1).astype("int32"), device=tvm.cuda(0)
-                )
-            )
 
         args = []
-        for i in range(num_buckets):
-            args += [ell_a_nd[i], ell_indices_i_nd[i], ell_indices_j_nd[i]]
+        for part_id in range(num_col_parts):
+            for bucket_id, _ in enumerate(bucket_sizes):
+                weight = tvm.nd.array(
+                    mask[part_id][bucket_id].numpy().reshape(-1).astype("float32"), device=tvm.cuda(0)
+                )
+                rows = tvm.nd.array(
+                    row_indices[part_id][bucket_id].numpy().astype("int32"), device=tvm.cuda(0)
+                )
+                cols = tvm.nd.array(
+                    col_indices[part_id][bucket_id].numpy().reshape(-1).astype("int32"),
+                    device=tvm.cuda(0),
+                )
+                args += [weight, rows, cols]
 
         kernel_args[forward] = args
 
         for feat_size in feat_sizes:
             if feat_size <= 32:
-                cwm = 1
+                coarsening_factor = 1
             elif feat_size <= 128:
-                cwm = 2
+                coarsening_factor = 2
             else:
-                cwm = 4
+                coarsening_factor = 4
 
             # rewrite csrmm
             nnz_cols_symbol = ell.params[-1]
             rewrites = []
-            for i, bucket_size in enumerate(buckets):
-                rewrites.append(
-                    FormatRewriteRule(
-                        str(i),
-                        ell.specialize({nnz_cols_symbol: bucket_size}),
-                        ["A"],
-                        ["I", "J"],
-                        ["O", "I", "J"],
-                        {"I": ["O", "I"], "J": ["J"]},
-                        csr2ell_index_map,
-                        csr2ell_inv_index_map,
+            for part_id in range(num_col_parts):
+                for bucket_id, bucket_size in enumerate(bucket_sizes):
+                    rewrites.append(
+                        FormatRewriteRule(
+                            str(part_id) + "_" + str(bucket_id),
+                            ell.specialize({nnz_cols_symbol: bucket_size}),
+                            ["A"],
+                            ["I", "J"],
+                            ["O", "I", "J"],
+                            {"I": ["O", "I"], "J": ["J"]},
+                            csr2ell_index_map,
+                            csr2ell_inv_index_map,
+                        )
                     )
-                )
             mod = tvm.IRModule.from_expr(csrmm)
-            mod = tvm.tir.transform.SparseFormatRewrite(rewrites)(mod)
+            mod = format_decompose(mod, rewrites)
             mod = tvm.tir.transform.RemovePreprocess()(mod)
 
             # specialize
@@ -368,53 +265,62 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], column_part=1):
             param_map = {
                 params[5]: m,  # m
                 params[6]: n,  # n
-                params[7]: feat_size // cwm // 32,  # num_tiles,
+                params[7]: feat_size // coarsening_factor // 32,  # num_tiles,
                 params[8]: nnz,  # nnz
-                params[9]: cwm,  # cwm
+                params[9]: coarsening_factor,  # coersening_factor
             }
-            for i, bucket_size in enumerate(buckets):
-                param_map[params[10 + 7 * i + 4]] = m
-                param_map[params[10 + 7 * i + 5]] = n
-                param_map[params[10 + 7 * i + 6]] = ell_n[i]
+            for part_id in range(num_col_parts):
+                for bucket_id in range(num_buckets):
+                    param_map[params[10 + 7 * (part_id * num_buckets + bucket_id) + 4]] = m
+                    param_map[params[10 + 7 * (part_id * num_buckets + bucket_id) + 5]] = n
+                    param_map[params[10 + 7 * (part_id * num_buckets + bucket_id) + 6]] = row_indices[
+                        part_id
+                    ][bucket_id].shape[0]
 
-            mod["main"] = (
-                mod["main"].specialize(param_map).with_attr("horizontal_fuse", True)
-            )
+            mod["main"] = mod["main"].specialize(param_map).with_attr("horizontal_fuse", True)
 
             # schedule
             sch = tvm.tir.Schedule(mod)
-            for sp_iter_name in ["csrmm_{}".format(i) for i in range(num_buckets)]:
+            for sp_iter_name in [
+                "csrmm_{}_{}".format(i, j) for j in range(num_buckets) for i in range(num_col_parts)
+            ]:
                 sp_iteration = sch.get_sparse_iteration(sp_iter_name)
                 o, i, j, k1, k2, k3 = sch.get_sp_iters(sp_iteration)
                 sch.sparse_fuse(sp_iteration, [o, i])
 
             mod = sch.mod
-            mod = lower_sparse_iter(mod)
+            mod = tvm.sparse.lower_sparse_iter(mod)
             sch = tvm.tir.Schedule(mod)
-            for i, bucket_size in enumerate(buckets):
-                is_atomic = is_bucket_atomic[i]
-                bucket_size = buckets[i]
-                blk = sch.get_block("csrmm_{}0".format(i))
-                i, j, foo, foi, fi = sch.get_loops(blk)
-                sch.reorder(foo, fi, j, foi)
-                if is_atomic:
-                    sch.annotate(blk, "atomic", True)
-                    write_blk = sch.cache_write(blk, 0, "local")
-                    sch.reverse_compute_at(write_blk, fi, True)
-                    # sch.unroll(sch.get_loops(write_blk)[-2])
-                sch.bind(fi, "threadIdx.x")
-                sch.bind(foo, "blockIdx.y")
-                sch.unroll(foi)
-                sch.unroll(j)
-                io, ioi, ii = sch.split(i, [None, bucket_sizes[-1] // bucket_size, 8])
-                sch.bind(io, "blockIdx.x")
-                sch.bind(ii, "threadIdx.y")
-                init_blk = sch.decompose_reduction(blk, fi)
-                ax0, ax1 = sch.get_loops(init_blk)[-2:]
-                sch.bind(ax0, "threadIdx.x")
-                sch.unroll(ax1)
+            for part_id in range(num_col_parts):
+                for bucket_id, bucket_size in enumerate(bucket_sizes):
+                    is_atomic = num_col_parts > 1 or bucket_id + 1 == num_buckets
+                    blk = sch.get_block("csrmm_{}_{}0".format(part_id, bucket_id))
+                    i, j, foo, foi, fi = sch.get_loops(blk)
+                    sch.reorder(foo, fi, j, foi)
+                    if is_atomic:
+                        sch.annotate(blk, "atomic", True)
+                        write_blk = sch.cache_write(blk, 0, "local")
+                        sch.reverse_compute_at(write_blk, fi, True)
+                        # sch.unroll(sch.get_loops(write_blk)[-2])
+                    sch.bind(fi, "threadIdx.x")
+                    sch.bind(foo, "blockIdx.y")
+                    sch.unroll(foi)
+                    if use_implicit_unroll:
+                        sch.annotate(foi, "pragma_unroll_explicit", 0)
+                    sch.unroll(j)
+                    if use_implicit_unroll:
+                        sch.annotate(j, "pragma_unroll_explicit", 0)
+                    io, ioi, ii = sch.split(i, [None, bucket_sizes[-1] // bucket_size, 8])
+                    sch.bind(io, "blockIdx.x")
+                    sch.bind(ii, "threadIdx.y")
+                    init_blk = sch.decompose_reduction(blk, fi)
+                    ax0, ax1 = sch.get_loops(init_blk)[-2:]
+                    sch.bind(ax0, "threadIdx.x")
+                    sch.unroll(ax1)
+                    if use_implicit_unroll:
+                        sch.annotate(ax1, "pragma_unroll_explicit", 0)
 
-            mod = lower_sparse_buffer(sch.mod)
+            mod = tvm.sparse.lower_sparse_buffer(sch.mod)
             mod = tvm.tir.transform.RemoveUnusedArgs()(mod)
             f = tvm.build(mod, target="cuda")
 
@@ -455,19 +361,11 @@ col_part = {
 
 def main():
     parser = argparse.ArgumentParser(description="OGBN-Arxiv (GraphSAGE Full-Batch)")
-    parser.add_argument("--dataset", type=str, default="arxiv")
-    parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--num_layers", type=int, default=3)
-    parser.add_argument("--hidden_channels", type=int, default=128)
-    parser.add_argument("--dropout", type=float, default=0.5)
-    parser.add_argument("--lr", type=float, default=0.01)
-    parser.add_argument("--epochs", type=int, default=500)
-    parser.add_argument("--runs", type=int, default=10)
+    parser.add_argument("-d", "--dataset", type=str, default="arxiv")
     args = parser.parse_args()
     print(args)
 
-    device = f"cuda:{args.device}" if torch.cuda.is_available() else "cpu"
-    device = torch.device(device)
+    device = torch.device(0)
 
     g, feats, labels, split_idx, num_classes = get_dataset(args.dataset)
     # pad
@@ -486,29 +384,36 @@ def main():
 
     create_kernels(
         g,
-        [feats.shape[-1], args.hidden_channels, num_classes],
+        [feats.shape[-1], 128, num_classes],
         bucketing_config[args.dataset],
         col_part[args.dataset],
     )
 
     model = GraphSAGE(
         in_feats=feats.size(-1),
-        hidden_feats=args.hidden_channels,
+        hidden_feats=128,
         out_feats=num_classes,
-        num_layers=args.num_layers,
-        dropout=args.dropout,
+        num_layers=3,
+        dropout=0.5,
     ).to(device)
 
-    dur = []
-    for run in range(args.runs):
-        model.reset_parameters()
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-        for epoch in range(1, 1 + args.epochs):
-            t0 = time.time()
-            loss = train(args.dataset, model, feats, labels, train_idx, optimizer)
-            if epoch >= 3:
-                dur.append(time.time() - t0)
-                print("Training time/epoch {}".format(np.mean(dur)))
+    model.reset_parameters()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    warmup = 20
+    active = 200
+   
+    for _ in range(warmup):
+        loss = train(args.dataset, model, feats, labels, train_idx, optimizer)
+
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    start_event.record()
+    for _ in range(active):
+        loss = train(args.dataset, model, feats, labels, train_idx, optimizer)
+    end_event.record()
+    torch.cuda.synchronize()
+    dur = start_event.elapsed_time(end_event) / active
+    print("Training time: {} ms/epoch".format(dur))
 
 
 if __name__ == "__main__":

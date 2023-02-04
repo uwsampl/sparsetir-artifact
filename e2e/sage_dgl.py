@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from dgl.utils import expand_as_pair
 from ogb.nodeproppred import DglNodePropPredDataset, Evaluator
 
-from utils import Logger, get_dataset
+from utils import get_dataset
 
 
 class SAGEConv(nn.Module):
@@ -116,21 +116,11 @@ def train(dataset, model, g, feats, y_true, train_idx, optimizer):
 
 def main():
     parser = argparse.ArgumentParser(description="GraphSAGE Full-Batch")
-    parser.add_argument("--dataset", type=str, default="arxiv")
-    parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--num_layers", type=int, default=3)
-    parser.add_argument("--hidden_channels", type=int, default=128)
-    parser.add_argument("--dropout", type=float, default=0.5)
-    parser.add_argument("--lr", type=float, default=0.01)
-    parser.add_argument("--epochs", type=int, default=500)
-    parser.add_argument("--runs", type=int, default=10)
+    parser.add_argument("-d", "--dataset", type=str, default="arxiv")
     args = parser.parse_args()
-    print(args)
 
-    device = f"cuda:{args.device}" if torch.cuda.is_available() else "cpu"
-    device = torch.device(device)
+    device = torch.device(0)
 
-    # dataset = DglNodePropPredDataset(name='ogbn-arxiv')
     g, feats, labels, split_idx, num_classes = get_dataset(args.dataset)
     g = dgl.to_bidirected(g)
     g = g.int().to(device)
@@ -139,24 +129,29 @@ def main():
 
     model = GraphSAGE(
         in_feats=feats.size(-1),
-        hidden_feats=args.hidden_channels,
+        hidden_feats=128,
         out_feats=num_classes,
-        num_layers=args.num_layers,
-        dropout=args.dropout,
+        num_layers=3,
+        dropout=0.5,
     ).to(device)
 
-    logger = Logger(args.runs, args)
+    model.reset_parameters()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    warmup = 20
+    active = 200
+   
+    for _ in range(warmup):
+        loss = train(args.dataset, model, g, feats, labels, train_idx, optimizer)
 
-    dur = []
-    for run in range(args.runs):
-        model.reset_parameters()
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-        for epoch in range(1, 1 + args.epochs):
-            t0 = time.time()
-            loss = train(args.dataset, model, g, feats, labels, train_idx, optimizer)
-            if epoch >= 3:
-                dur.append(time.time() - t0)
-                print("Training time/epoch {}".format(np.mean(dur)))
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    start_event.record()
+    for _ in range(active):
+        loss = train(args.dataset, model, g, feats, labels, train_idx, optimizer)
+    end_event.record()
+    torch.cuda.synchronize()
+    dur = start_event.elapsed_time(end_event) / active
+    print("Training time: {} ms/epoch".format(dur))
 
 
 if __name__ == "__main__":

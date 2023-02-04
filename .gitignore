@@ -1,6 +1,7 @@
 *.mtx
 *.npz
 *.log
+*.err
 *.csv
 .vscode/
 *.pyc

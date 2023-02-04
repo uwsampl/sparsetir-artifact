@@ -100,12 +100,12 @@ def bench_hyb(
     y_golden,
     feat_size=128,
     bucket_sizes=[],
-    coersening_factor=2,
+    coarsening_factor=2,
     num_col_parts=1,
     use_implicit_unroll=False,
 ):
     num_buckets = len(bucket_sizes)
-    coersening_factor = min(coersening_factor, feat_size // 32)
+    coarsening_factor = min(coarsening_factor, feat_size // 32)
     indptr, indices, _ = g.adj_sparse("csc")
     m = g.num_dst_nodes()
     n = g.num_src_nodes()
@@ -145,9 +145,9 @@ def bench_hyb(
     param_map = {
         params[5]: m,  # m
         params[6]: n,  # n
-        params[7]: feat_size // coersening_factor // 32,  # num_tiles,
+        params[7]: feat_size // coarsening_factor // 32,  # num_tiles,
         params[8]: nnz,  # nnz
-        params[9]: coersening_factor,  # coersening_factor
+        params[9]: coarsening_factor,  # coersening_factor
     }
     for part_id in range(num_col_parts):
         for bucket_id in range(num_buckets):
@@ -277,7 +277,7 @@ if __name__ == "__main__":
             y_golden,
             feat_size=feat_size,
             bucket_sizes=bucketing_config[name],
-            coersening_factor=2,
+            coarsening_factor=2,
             num_col_parts=col_part_config[name],
             use_implicit_unroll=args.implicit_unroll,
         )
