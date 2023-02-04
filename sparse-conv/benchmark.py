@@ -4,6 +4,7 @@ import dgl
 import numpy as np
 import pandas as pd
 import tvm
+import os
 from torchsparse.nn.functional.conv import ConvolutionFunction
 from rgcn import rgcn_tensorcore
 from sparsetir_profiler import profile_pytorch_ms
@@ -30,7 +31,12 @@ buffer = torch.zeros(
 
 results = []
 
-for fpath in glob.glob("layers/*.pth"):
+home = os.path.expanduser("~")
+path = os.path.join(home, "layers")
+if not os.path.exists(path):
+    raise RuntimeError("Data not downloaded.")
+
+for fpath in glob.glob(os.path.join(path, "*.pth")):
     data = torch.load(fpath)
 
     inputs = data["input"].half().to(device)
