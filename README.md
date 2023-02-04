@@ -18,21 +18,39 @@ cd sparsetir-artifact
 docker build -t sparsetir-artifact .
 ```
 
+Before building the artifact, user need to select nvidia runtime to enable GPU access when buildling docker containers ([reference](https://github.com/NVIDIA/nvidia-docker/wiki/Advanced-topics#default-runtime)),
+by editing the file `/etc/docker/daemon.json` with content:
+```
+{
+    "runtimes": {
+        "nvidia": {
+            "path": "/usr/bin/nvidia-container-runtime",
+            "runtimeArgs": []
+         } 
+    },
+    "default-runtime": "nvidia" 
+}
+```
+then restart docker daemonn:
+```
+sudo systemctl restart docker
+```
+
 ## Run experiments
 
 ```bash
 # Run SpMM experiments
-docker run -it --gpus all -v $(pwd)/spmm/:/root/spmm sparsetir spmm/run.sh
+docker run -it --gpus all -v $(pwd)/spmm/:/root/spmm sparsetir cd spmm && bash run.sh
 # Run SDDMM experiments
-docker run -it --gpus all -v $(pwd)/sddmm/:/root/sddmm sparsetir sddmm/run.sh
+docker run -it --gpus all -v $(pwd)/sddmm/:/root/sddmm sparsetir cd sddmm && bash run.sh
 # Run GraphSAGE training experiments
-docker run -it --gpus all -v $(pwd)/e2e/:/root/e2e sparsetir sddmm/run.sh
+docker run -it --gpus all -v $(pwd)/e2e/:/root/e2e sparsetir cd e2e && bash run.sh
 # Run RGCN inference experiments
-docker run -it --gpus all -v $(pwd)/rgcn/:/root/rgcn sparsetir rgcn/run.sh
+docker run -it --gpus all -v $(pwd)/rgcn/:/root/rgcn sparsetir cd rgcn && bash rgcn/run.sh
 # Run Sparse Attention experiments
-docker run -it --gpus all -v $(pwd)/sparse-attention/:/root/sparse-attention sparsetir sparse-attention/run.sh
+docker run -it --gpus all -v $(pwd)/sparse-attention/:/root/sparse-attention cd sparse-attention && bash run.sh
 # Run PrunedBERT experiments
-docker run -it --gpus all -v $(pwd)/pruned-bert/:/root/pruned-bert sparsetir pruned-bert/run.sh
+docker run -it --gpus all -v $(pwd)/pruned-bert/:/root/pruned-bert sparsetir cd pruned-bert && bash run.sh
 # Run Sparse Convolution experiments
-docker run -it --gpus all -v $(pwd)/sparse-conv/:/root/sparse-conv sparsetir sparse-conv/run.sh
+docker run -it --gpus all -v $(pwd)/sparse-conv/:/root/sparse-conv sparsetir cd sparse-conv && bash run.sh
 ```

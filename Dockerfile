@@ -111,7 +111,7 @@ WORKDIR /tmp/taco
 RUN rm -rf build/\
     && mkdir build\
     && cd build/\
-    && cmake ..\
+    && cmake -DCMAKE_BUILD_TYPE=Release -DCUDA=ON ..\
     && make
 
 # install sparsetir_profiler
@@ -133,3 +133,7 @@ RUN python3 download_huggingface_model.py
 
 # install plotting softwares
 RUN apt-get install -y texlive-font-utils gnuplot
+
+# set LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH /usr/local/lib:/usr/local/lib64:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+
