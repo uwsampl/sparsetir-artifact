@@ -72,7 +72,7 @@ for fpath in glob.glob(os.path.join(path, "*.pth")):
         )
     )
 
-    print("torchsparse time: \t{:5f}ms".format(dur_torchsparse))
+    print("torchsparse time: \t{:5f} ms".format(dur_torchsparse))
 
     # use sparsetir op
     graph_data = {}
