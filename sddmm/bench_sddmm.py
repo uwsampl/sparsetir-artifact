@@ -10,7 +10,7 @@ import torch as th
 from tvm.script import tir as T
 from tvm.sparse import lower_sparse_iter, lower_sparse_buffer
 from ogb.nodeproppred import DglNodePropPredDataset
-from sparsetir_artifact import profile_tvm_ms, profile_pytorch_ms
+from sparsetir_artifact import profile_tvm_ms
 from utils import get_dataset
 
 
@@ -58,9 +58,6 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
     b_gpu = b.to(0)
     g = g.to(0)
     c_golden = dgl.ops.u_dot_v(g, a_gpu, b_gpu)
-
-    dur = profile_pytorch_ms(lambda: dgl.ops.u_dot_v(g, a_gpu, b_gpu))
-    print("dgl time:\t{:.5f} ms".format(dur))
 
     # tvm
     mod = tvm.IRModule.from_expr(sddmm(m, n, feat_size, nnz))
@@ -177,4 +174,3 @@ if __name__ == "__main__":
         except Exception as e:
             print("OOM")
             print(e, file=sys.stderr)
-

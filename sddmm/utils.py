@@ -43,7 +43,6 @@ def get_dataset(dataset_name: str):
     elif dataset_name == "ppi":
         ppi = dgl.data.PPIDataset()
         g = dgl.batch(ppi)
-        return g
     elif dataset_name == "reddit":
         reddit = dgl.data.RedditDataset()
         g = reddit[0]
