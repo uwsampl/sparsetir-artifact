@@ -14,11 +14,11 @@ def extract_data():
             "TACO", "SparseTIR(no-hyb)", "SparseTIR(hyb)"
         ]) + "\n")
         datasets = [
-            "cora"#, "citeseer", "pubmed", "ppi", "arxiv", "proteins", "reddit"
+            "citeseer", "pubmed", "ppi", "arxiv", "proteins", "reddit"
         ]
         display_names = [
-            "Cora"#, "Citeseer", "Pubmed", "PPI", "ogbn-arxiv", "ogbn-proteins",
-            #"Reddit"
+            "Citeseer", "Pubmed", "PPI", "ogbn-arxiv", "ogbn-proteins",
+            "Reddit"
         ]
         for display_name, dataset in zip(display_names, datasets):
             # extract sparsetir hyb
