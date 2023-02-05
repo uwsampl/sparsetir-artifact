@@ -90,12 +90,16 @@ def bench_sddmm(g: dgl.DGLGraph, feat_size: int):
     mid_nd = tvm.nd.array(np.zeros((nnz,), np.int32), tvm.cuda())
 
     preproc(a_nd, b_nd, c_nd, indptr_nd, indices_nd, mid_nd)
+    ty_candidates = [1, 2, 4, 8]
+    tx_candidates = [8, 16, 32]
+    vecsize_candidates = [1, 2, 4]
+    groupsize_candidates = [1, 2, 4]
 
     best = 1e9
-    for ty in [1, 2, 4, 8]:
-        for tx in [8, 16, 32]:
-            for vec_size in [1, 2, 4]:
-                for group_size in [1, 2, 4]:
+    for ty in ty_candidates:
+        for tx in tx_candidates:
+            for vec_size in vecsize_candidates:
+                for group_size in groupsize_candidates:
                     if tx * vec_size > feat_size:
                         continue
                     # schedule compute

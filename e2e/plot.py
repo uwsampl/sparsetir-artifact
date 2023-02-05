@@ -26,7 +26,7 @@ set size 1, 1
 to_str(x) = (x > 0) ? ((x < 10) ? sprintf("%.2f", x) : sprintf("%d", x)): (x == -1 ? "N/A" : "OOM")
 y_pos(x) = x + 0.1
 y_val(x) = ((x > 0) ? x : 0.)
-set arrow from -1,1 to 5.5,1 nohead lw 3 dt 3
+set arrow from -1,1 to 6.5,1 nohead lw 3 dt 3
 """
 
 plot(
