@@ -269,7 +269,7 @@ if __name__ == "__main__":
     g = get_dataset(name)
 
     for feat_size in [32, 64, 128, 256, 512]:
-        print("feat_size =", feat_size)
+        print("feat_size = ", feat_size)
         try:
             x = th.rand((g.num_src_nodes(), feat_size))
             y_golden = dgl.ops.copy_u_sum(g, x)

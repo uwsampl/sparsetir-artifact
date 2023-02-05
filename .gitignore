@@ -3,6 +3,8 @@
 *.log
 *.err
 *.csv
+*.pdf
+*.dat
 .vscode/
 *.pyc
 __pycache__/
