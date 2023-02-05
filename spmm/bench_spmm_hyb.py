@@ -34,7 +34,7 @@ from tvm.sparse import (
 )
 import tvm.sparse
 from utils import get_dataset
-from sparsetir_profiler import profile_tvm_ms
+from sparsetir_artifact import profile_tvm_ms
 
 
 @T.prim_func

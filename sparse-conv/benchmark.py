@@ -7,7 +7,7 @@ import tvm
 import os
 from torchsparse.nn.functional.conv import ConvolutionFunction
 from rgcn import rgcn_tensorcore
-from sparsetir_profiler import profile_pytorch_ms
+from sparsetir_artifact import profile_pytorch_ms
 
 
 def get_type_pointers(g: dgl.DGLHeteroGraph):

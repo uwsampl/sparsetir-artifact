@@ -3,7 +3,7 @@ from utils import create_pixelfly, create_longformer
 import dgl
 import torch
 import argparse
-from sparsetir_profiler import profile_pytorch_ms
+from sparsetir_artifact import profile_pytorch_ms
 
 
 def test_csr_spmm(pattern: str):

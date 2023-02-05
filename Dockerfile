@@ -115,9 +115,9 @@ RUN rm -rf build/\
     && make -j\
     && make install
 
-# install sparsetir_profiler
-COPY python/ /tmp/sparsetir_profiler
-WORKDIR /tmp/sparsetir_profiler
+# install sparsetir_artifact
+COPY python/ /tmp/sparsetir_artifact
+WORKDIR /tmp/sparsetir_artifact
 RUN pip3 install -e .
 
 # download data

@@ -29,7 +29,7 @@ from tvm.sparse import FormatRewriteRule, lower_sparse_buffer, lower_sparse_iter
 import tvm.sparse
 from ogb.nodeproppred import DglNodePropPredDataset
 from utils import get_dataset
-from sparsetir_profiler import profile_tvm_ms
+from sparsetir_artifact import profile_tvm_ms
 
 
 @T.prim_func

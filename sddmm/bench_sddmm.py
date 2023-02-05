@@ -10,7 +10,7 @@ import torch as th
 from tvm.script import tir as T
 from tvm.sparse import lower_sparse_iter, lower_sparse_buffer
 from ogb.nodeproppred import DglNodePropPredDataset
-from sparsetir_profiler import profile_tvm_ms, profile_pytorch_ms
+from sparsetir_artifact import profile_tvm_ms, profile_pytorch_ms
 from utils import get_dataset
 
 

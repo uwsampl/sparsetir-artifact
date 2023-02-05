@@ -14,7 +14,7 @@ from tvm.sparse import (
     csf_to_ell3d,
 )
 from typing import List, Tuple, Mapping
-from sparsetir_profiler import profile_tvm_ms
+from sparsetir_artifact import profile_tvm_ms
 
 
 def wmma_sync(d0: int, d1: int):

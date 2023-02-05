@@ -9,7 +9,7 @@ from tvm.ir import IRModule
 from tqdm import tqdm
 from tvm.sparse import lower_sparse_iter, lower_sparse_buffer
 from utils import create_pixelfly, create_longformer
-from sparsetir_profiler import profile_tvm_ms
+from sparsetir_artifact import profile_tvm_ms
 
 
 @T.prim_func

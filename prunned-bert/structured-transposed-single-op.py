@@ -15,7 +15,7 @@ import tvm.testing
 import tvm.tir as tir
 from tvm.script import tir as T
 from tvm.sparse import lower_sparse_buffer, lower_sparse_iter
-from sparsetir_profiler import profile_pytorch_ms, profile_tvm_ms
+from sparsetir_artifact import profile_pytorch_ms, profile_tvm_ms
 
 
 def bsrmm(mb, nb, nnz, blk, feat_size):

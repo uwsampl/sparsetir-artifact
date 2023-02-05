@@ -3,7 +3,7 @@ import torch
 import argparse
 import triton
 from utils import create_pixelfly, create_longformer
-from sparsetir_profiler import profile_pytorch_ms
+from sparsetir_artifact import profile_pytorch_ms
 
 
 def test_matmul(

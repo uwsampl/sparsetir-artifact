@@ -9,7 +9,7 @@ import numpy as np
 import torch as th
 import scipy.sparse as sp
 from utils import create_pixelfly, create_longformer
-from sparsetir_profiler import profile_tvm_ms
+from sparsetir_artifact import profile_tvm_ms
 
 
 @T.prim_func
