@@ -112,7 +112,8 @@ RUN rm -rf build/\
     && mkdir build\
     && cd build/\
     && cmake -DCMAKE_BUILD_TYPE=Release -DCUDA=ON ..\
-    && make
+    && make -j\
+    && make install
 
 # install sparsetir_profiler
 COPY python/ /tmp/sparsetir_profiler

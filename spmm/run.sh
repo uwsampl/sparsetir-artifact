@@ -2,7 +2,7 @@
 
 if [ ! -d data/ ]
 then
-  python3 dump_nnz.py
+  python3 dump_npz.py
 fi
 
 for dataset in cora citeseer pubmed ppi arxiv proteins reddit
