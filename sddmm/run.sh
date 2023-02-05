@@ -1,15 +1,17 @@
 #!/bin/bash
 
+# Benchmark
+echo "Running SDDMM benchmark..."
 if [ ! -d data/ ]
 then
-  python3 dump_npz.py
+  python3 dump_npz.py > dump_npz.log 2> dump_npz.err
 fi
 
 for dataset in cora citeseer pubmed ppi arxiv proteins reddit
 do
   # sparsetir & dgl
   echo "Running SparseTIR SDDMM on ${dataset}"
-  python3 bench_sddmm.py -d ${dataset} > sparsetir_${dataset}.log
+  python3 bench_sddmm.py -d ${dataset} > sparsetir_${dataset}.log 2> sparsetir_${dataset}.err
   for feat_size in 32 64 128 256 512
   do
     # dgsparse
@@ -23,3 +25,13 @@ do
     taco-sddmm data/${dataset}.npz ${feat_size} > taco_${dataset}_${feat_size}.log 2> taco_${dataset}_${feat_size}.err
   done
 done
+
+# Extract data
+echo "Extracting data from log files..."
+python3 extract_data.py
+
+# Plot figures
+echo "Plotting figures..."
+python3 plot.py
+
+echo "Evaluation finished, see `sddmm.pdf` for results."

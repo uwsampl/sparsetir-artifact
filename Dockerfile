@@ -134,6 +134,7 @@ RUN python3 download_huggingface_model.py
 
 # install plotting softwares
 RUN apt-get install -y texlive-font-utils gnuplot
+COPY 3rdparty/gnuplot-palettes /root/gnuplot-palettes
 
 # set LD_LIBRARY_PATH
 ENV LD_LIBRARY_PATH /usr/local/lib:/usr/local/lib64:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}

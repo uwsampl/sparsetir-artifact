@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Benchmark
+echo "Running Sparse Attention benchmark..."
 for backend in csr sparse_tir triton_blocksparse
   do
   for pattern in pixelfly longformer
@@ -11,3 +13,13 @@ for backend in csr sparse_tir triton_blocksparse
     done
   done
 done
+
+# Extract data
+echo "Extracting data from log files..."
+python3 extract_data.py
+
+# Plot figures
+echo "Plotting figures..."
+python3 plot.py
+
+echo "Evaluation finished, see `blocksparse.pdf` for results."

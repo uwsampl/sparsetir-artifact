@@ -28,3 +28,6 @@
 	path = 3rdparty/graphiler
 	url = git@github.com:yzh119/graphiler.git
 	branch = new-pytorch-api
+[submodule "3rdparty/gnuplot-palettes"]
+	path = 3rdparty/gnuplot-palettes
+	url = git@github.com:Gnuplotting/gnuplot-palettes.git
