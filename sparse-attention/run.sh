@@ -22,4 +22,4 @@ python3 extract_data.py
 echo "Plotting figures..."
 python3 plot.py
 
-echo "Evaluation finished, see `blocksparse.pdf` for results."
+echo "Evaluation finished, see blocksparse.pdf for results."

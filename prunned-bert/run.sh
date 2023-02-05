@@ -22,4 +22,4 @@ gnuplot unstructured.plt
 epstopdf unstructured.ps
 rm unstructured.ps
 
-echo "Finished evaluation, see `structured.pdf` and `unstructured.pdf` for the results."
+echo "Finished evaluation, see structured.pdf and unstructured.pdf for the results."

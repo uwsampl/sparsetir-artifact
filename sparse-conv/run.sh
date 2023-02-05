@@ -14,4 +14,4 @@ gnuplot sparseconv.plt
 epstopdf sparseconv.ps
 rm sparseconv.ps
 
-echo "Evaluation finished, see `sparseconv.pdf` for results."
+echo "Evaluation finished, see sparseconv.pdf for results."

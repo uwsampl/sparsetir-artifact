@@ -18,7 +18,7 @@ def test_csr_spmm(pattern: str):
     x_gpu = torch.rand(4096, 64).to(0)
 
     measure = profile_pytorch_ms(lambda: dgl.ops.copy_u_sum(g, x_gpu))
-    print("cusparse csrmm time: \t{:.5f}ms".format(measure))
+    print("cusparse csrmm time: \t{:.5f} ms".format(measure))
     return measure
 
 

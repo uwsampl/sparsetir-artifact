@@ -19,7 +19,7 @@ def test_csr_sddmm(pattern: str):
     b_gpu = torch.rand(4096, 64).to(0)
 
     measure = profile_pytorch_ms(lambda: dgl.ops.u_dot_v(g, a_gpu, b_gpu))
-    print("cusparse csrmm time: \t{:.5f}ms".format(measure))
+    print("cusparse csrmm time: \t{:.5f} ms".format(measure))
     return measure
 
 

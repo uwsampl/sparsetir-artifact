@@ -54,12 +54,6 @@ def test_matmul(
     # compare
     triton.testing.assert_almost_equal(c_ref, c_tri)
 
-    print(
-        "triton-block-sddmm\tM\t{}\tN\t{}\tK\t{}\tblock\t{}\tdtype\t{}\ttrans_A\t{}\ttrans_B\t{}".format(
-            M, N, K, BLOCK, DTYPE, TRANS_A, TRANS_B
-        )
-    )
-
     measure = profile_pytorch_ms(lambda: op(a_tri, b_tri))
     print("triton time: \t{:.5f} ms".format(measure))
     return measure
