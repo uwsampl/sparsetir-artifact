@@ -36,7 +36,7 @@ by editing the file `/etc/docker/daemon.json` with content:
     "default-runtime": "nvidia" 
 }
 ```
-then restart docker daemonn:
+then restart docker daemon:
 ```bash
 sudo systemctl restart docker
 ```
