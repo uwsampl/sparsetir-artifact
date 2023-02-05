@@ -12,9 +12,18 @@ We suggest using NVIDIA container to setup environments, please install these pa
 git clone git@github.com:uwsampl/sparsetir-artifact.git --recursive
 cd sparsetir-artifact
 ```
-## Build Docker Container
+## Setup Docker Image
 
-Before building the artifact, user need to select nvidia runtime to enable GPU access when buildling docker containers ([reference](https://github.com/NVIDIA/nvidia-docker/wiki/Advanced-topics#default-runtime)),
+### Pull from Docker Hub
+
+We provide a pre-built docker image available on Docker Hub which is compatible with Ampere architecture NVIDIA GPUs, user can pull it with:
+```
+docker pull expye/sparestir-ae:latest
+docker tag expye/sparsetir-ae:latest sparsetir
+```
+
+### Build from source
+Otherwise, user need to build the docker image from source code. Before building the artifact, user need to set docker's default runtime to `nvidia` to enable GPU access when buildling docker images ([reference](https://github.com/NVIDIA/nvidia-docker/wiki/Advanced-topics#default-runtime)),
 by editing the file `/etc/docker/daemon.json` with content:
 ```json
 {
@@ -32,13 +41,14 @@ then restart docker daemonn:
 sudo systemctl restart docker
 ```
 
-
 After these steps, user can run the following command to build docker container:
 ```bash
 docker build -t sparsetir-artifact .
 ```
 
 ## Run experiments
+
+Below is the script to reproduce experiments in SparseTIR paper, each script would emit logging files and figures in pdf format.
 
 ```bash
 # Run SpMM experiments
