@@ -125,7 +125,7 @@ WORKDIR /root
 COPY sparse-conv/download_data.sh download_sparse_conv.sh
 COPY spmm/download_data.py download_gnn_data.py
 COPY rgcn/download_data.py download_rgcn_data.py
-COPY prunned-bert/download_model.py download_huggingface_model.py
+COPY pruned-bert/download_model.py download_huggingface_model.py
 
 RUN bash download_sparse_conv.sh
 RUN echo "y\ny\n" | python3 download_gnn_data.py
