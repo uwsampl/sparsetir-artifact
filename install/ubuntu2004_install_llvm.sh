@@ -42,7 +42,7 @@ echo deb http://apt.llvm.org/focal/ llvm-toolchain-focal main\
 echo deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main\
     >> /etc/apt/sources.list.d/llvm.list
 
-apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
 
 apt-get update && apt-get install -y \
      llvm-13 \
