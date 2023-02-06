@@ -9,7 +9,7 @@ We suggest using NVIDIA container to setup environments, please install these pa
 ## Clone the Repository
 
 ```bash
-git clone git@github.com:uwsampl/sparsetir-artifact.git --recursive
+git clone https://github.com/uwsampl/sparsetir-artifact.git --recursive
 cd sparsetir-artifact
 ```
 ## Setup Docker Image

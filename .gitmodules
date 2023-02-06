@@ -1,33 +1,33 @@
 [submodule "3rdparty/glog"]
 	path = 3rdparty/glog
-	url = git@github.com:google/glog.git
+	url = https://github.com/google/glog.git
 [submodule "3rdparty/triton"]
 	path = 3rdparty/triton
-	url = git@github.com:yzh119/triton.git
+	url = https://github.com/yzh119/triton.git
 [submodule "3rdparty/taco"]
 	path = 3rdparty/taco
-	url = git@github.com:yzh119/taco.git
+	url = https://github.com/yzh119/taco.git
 	branch = sparsetir-eval
 [submodule "3rdparty/sputnik"]
 	path = 3rdparty/sputnik
-	url = git@github.com:yzh119/sputnik.git
+	url = https://github.com/yzh119/sputnik.git
 [submodule "3rdparty/torchsparse"]
 	path = 3rdparty/torchsparse
-	url = git@github.com:yzh119/torchsparse.git
+	url = https://github.com/yzh119/torchsparse.git
 [submodule "3rdparty/SparseTIR"]
 	path = 3rdparty/SparseTIR
-	url = git@github.com:uwsampl/SparseTIR.git
+	url = https://github.com/uwsampl/SparseTIR.git
 [submodule "3rdparty/kineto"]
 	path = 3rdparty/kineto
-	url = git@github.com:pytorch/kineto.git
+	url = https://github.com/pytorch/kineto.git
 [submodule "3rdparty/dgsparse"]
 	path = 3rdparty/dgsparse
-	url = git@github.com:yzh119/dgsparse.git
+	url = https://github.com/yzh119/dgsparse.git
 	branch = v0.1-cmake
 [submodule "3rdparty/graphiler"]
 	path = 3rdparty/graphiler
-	url = git@github.com:yzh119/graphiler.git
+	url = https://github.com/yzh119/graphiler.git
 	branch = new-pytorch-api
 [submodule "3rdparty/gnuplot-palettes"]
 	path = 3rdparty/gnuplot-palettes
-	url = git@github.com:Gnuplotting/gnuplot-palettes.git
+	url = https://github.com/Gnuplotting/gnuplot-palettes.git
