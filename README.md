@@ -42,7 +42,7 @@ cd sparsetir-artifact
 
 We provide a pre-built docker image available on Docker Hub which is compatible with Ampere architecture NVIDIA GPUs, user can pull it with:
 ```
-docker pull expye/sparestir-ae:latest
+docker image pull expye/sparsetir-ae:latest
 docker tag expye/sparsetir-ae:latest sparsetir
 ```
 
