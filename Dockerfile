@@ -139,3 +139,5 @@ COPY 3rdparty/gnuplot-palettes /root/gnuplot-palettes
 # set LD_LIBRARY_PATH
 ENV LD_LIBRARY_PATH /usr/local/lib:/usr/local/lib64:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 
+# set environment variable FLUSH_L2
+ENV FLUSH_L2 ON
