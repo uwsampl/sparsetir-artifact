@@ -1,5 +1,7 @@
 # SparseTIR Artifact
 
+[![DOI](https://zenodo.org/badge/471216066.svg)](https://zenodo.org/badge/latestdoi/471216066)
+
 This repo stores scripts for setting up environments and reproducing results in paper [SparseTIR: Composable Abstractions for Deep Learning](https://arxiv.org/abs/2207.04606), please checkout [SparseTIR repo](https://github.com/uwsampl/sparsetir) for core implementation of SparseTIR.
 
 We suggest using NVIDIA container to setup environments, please install these packages below by following their instructions:
