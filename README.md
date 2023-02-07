@@ -4,9 +4,31 @@
 
 This repo stores scripts for setting up environments and reproducing results in paper [SparseTIR: Composable Abstractions for Deep Learning](https://arxiv.org/abs/2207.04606), please checkout [SparseTIR repo](https://github.com/uwsampl/sparsetir) for core implementation of SparseTIR.
 
-We suggest using NVIDIA container to setup environments, please install these packages below by following their instructions:
-- [Docker](https://docs.docker.com/engine/install/)
-- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+## Prerequisite
+
+We require NVIDIA Container Toolkit to setup environments, please follow instructions from [installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html),
+below is the installation script for Debian/Ubuntu (extracted from official guide):
+```
+curl https://get.docker.com | sh \
+  && sudo systemctl --now enable docker
+
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID) \
+      && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+      && curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+            sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+User can try the following command to test whether the installation was successful or not:
+```
+docker run --rm --runtime=nvidia --gpus all nvidia/cuda:11.6.2-base-ubuntu20.04 nvidia-smi
+```
 
 ## Clone the Repository
 
@@ -68,3 +90,4 @@ docker run -it --gpus all -v $(pwd)/pruned-bert/:/root/pruned-bert sparsetir /bi
 # Run Sparse Convolution experiments
 docker run -it --gpus all -v $(pwd)/sparse-conv/:/root/sparse-conv sparsetir /bin/bash -c 'cd sparse-conv && bash run.sh'
 ```
+
