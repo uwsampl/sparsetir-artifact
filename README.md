@@ -67,7 +67,7 @@ sudo systemctl restart docker
 
 After these steps, user can run the following command to build docker container:
 ```bash
-docker build -t sparsetir-artifact .
+docker build -t sparsetir .
 ```
 
 ## Run experiments
