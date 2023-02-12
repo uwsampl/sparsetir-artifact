@@ -13,7 +13,6 @@ set key top font "Helvetica, 15"
 set key autotitle columnhead
 set format x '2^{%L}'  #<- enhanced text.
 
-set xrange 
 set yrange [0.125: 8]
 set xrange [0.0047: 0.19]
 set logscale y 2

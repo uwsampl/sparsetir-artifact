@@ -10,14 +10,14 @@ def geomean_speedup(baseline: List, x: List) -> Any:
 def extract_data():
     with open("spmm.dat", "w") as fout:
         fout.write(" ".join([
-            "Dataset", "cuSPARSE", "Sputnik", "dgSPARSE",
-            "TACO", "SparseTIR(no-hyb)", "SparseTIR(hyb)"
+            "Dataset", "cuSPARSE", "Sputnik", "dgSPARSE", "TACO",
+            "SparseTIR(no-hyb)", "SparseTIR(hyb)"
         ]) + "\n")
         datasets = [
-            "citeseer", "pubmed", "ppi", "arxiv", "proteins", "reddit"
+            "cora", "citeseer", "pubmed", "ppi", "arxiv", "proteins", "reddit"
         ]
         display_names = [
-            "Citeseer", "Pubmed", "PPI", "ogbn-arxiv", "ogbn-proteins",
+            "Cora", "Citeseer", "Pubmed", "PPI", "ogbn-arxiv", "ogbn-proteins",
             "Reddit"
         ]
         for display_name, dataset in zip(display_names, datasets):
@@ -29,7 +29,8 @@ def extract_data():
                     if line.startswith("OOM"):
                         exec_times["sparsetir_hyb"].append("OOM")
                     elif line.startswith("tir hyb"):
-                        exec_times["sparsetir_hyb"].append(float(line.split()[-2]))
+                        exec_times["sparsetir_hyb"].append(
+                            float(line.split()[-2]))
 
             # extract sparsetir naive
             with open("sparsetir_{}_naive.log".format(dataset), "r") as f:
@@ -38,7 +39,8 @@ def extract_data():
                     if line.startswith("OOM"):
                         exec_times["sparsetir_naive"].append("OOM")
                     elif line.startswith("tir naive"):
-                        exec_times["sparsetir_naive"].append(float(line.split()[-2]))
+                        exec_times["sparsetir_naive"].append(
+                            float(line.split()[-2]))
 
             # extract taco
             exec_times["taco"] = []
@@ -93,8 +95,8 @@ def extract_data():
                 break
             else:
                 for backend in [
-                        "cusparse", "sputnik", "dgsparse",
-                        "taco", "sparsetir_naive", "sparsetir_hyb"
+                        "cusparse", "sputnik", "dgsparse", "taco",
+                        "sparsetir_naive", "sparsetir_hyb"
                 ]:
                     if "OOM" in exec_times[backend]:
                         fout.write("0 ")
