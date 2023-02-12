@@ -91,3 +91,8 @@ docker run -it --gpus all -v $(pwd)/pruned-bert/:/root/pruned-bert sparsetir /bi
 docker run -it --gpus all -v $(pwd)/sparse-conv/:/root/sparse-conv sparsetir /bin/bash -c 'cd sparse-conv && bash run.sh'
 ```
 
+User can use `run-all.sh` script to run all experiments:
+```bash
+bash run-all.sh
+```
+

@@ -12,43 +12,42 @@ from utils import create_pixelfly, create_longformer
 from sparsetir_artifact import profile_tvm_ms
 
 
-@T.prim_func
-def bsrsddmm(
-    a: T.handle,
-    b: T.handle,
-    c: T.handle,
-    indptr: T.handle,
-    indices: T.handle,
-    nb: T.int32,
-    mb: T.int32,
-    nnzb: T.int32,
-    blk: T.int32,
-    feat_size: T.int32,
-    num_heads: T.int32,
-) -> None:
-    T.func_attr({"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2})
-    I = T.dense_fixed(nb)
-    J = T.sparse_variable(I, (mb, nnzb), (indptr, indices), "int32")
-    J_detach = T.dense_fixed(mb)
-    BI = T.dense_fixed(blk)
-    BJ = T.dense_fixed(blk)
-    H = T.dense_fixed(num_heads)
-    F = T.dense_fixed(feat_size)
-    A = T.match_sparse_buffer(a, (H, I, BI, F), "float16")
-    B = T.match_sparse_buffer(b, (H, J_detach, BJ, F), "float16")
-    C = T.match_sparse_buffer(c, (H, I, J, BI, BJ), "float16")
+def sddmm(mb: int, nb: int, nnzb: int, block_size: int, feat_size: int, num_heads: int):
+    @T.prim_func
+    def func(
+        a: T.handle,
+        b: T.handle,
+        c: T.handle,
+        indptr: T.handle,
+        indices: T.handle,
+    ) -> None:
+        T.func_attr(
+            {"global_symbol": "main", "tir.noalias": True, "sparse_tir_level": 2}
+        )
+        I = T.dense_fixed(mb)
+        J = T.sparse_variable(I, (nb, nnzb), (indptr, indices), "int32")
+        J_detach = T.dense_fixed(nb)
+        BI = T.dense_fixed(block_size)
+        BJ = T.dense_fixed(block_size)
+        H = T.dense_fixed(num_heads)
+        F = T.dense_fixed(feat_size)
+        A = T.match_sparse_buffer(a, (H, I, BI, F), "float16")
+        B = T.match_sparse_buffer(b, (H, J_detach, BJ, F), "float16")
+        C = T.match_sparse_buffer(c, (H, I, J, BI, BJ), "float16")
 
-    with T.iter([H, I, J, BI, BJ, F], "SSSSSR", "sddmm") as [
-        h,
-        i,
-        j,
-        bi,
-        bj,
-        f,
-    ]:
-        with T.init():
-            C[h, i, j, bi, bj] = T.float16(0)
-        C[h, i, j, bi, bj] = C[h, i, j, bi, bj] + A[h, i, bi, f] * B[h, j, bj, f]
+        with T.iter([H, I, J, BI, BJ, F], "SSSSSR", "sddmm") as [
+            h,
+            i,
+            j,
+            bi,
+            bj,
+            f,
+        ]:
+            with T.init():
+                C[h, i, j, bi, bj] = T.float16(0)
+            C[h, i, j, bi, bj] = C[h, i, j, bi, bj] + A[h, i, bi, f] * B[h, j, bj, f]
+
+    return func
 
 
 @T.prim_func
@@ -376,12 +375,12 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     block_size = 16
-    nb = 256
     mb = 256
+    nb = 256
     feat_size = 64
     num_heads = 12
-    n = nb * block_size
     m = mb * block_size
+    n = nb * block_size
 
     if args.pattern == "pixelfly":
         C_block = create_pixelfly(1, mb, fmt="bsr")
@@ -402,89 +401,82 @@ if __name__ == "__main__":
         nonzero = mask.nonzero()
         C_ground_truth = C[nonzero[:, 0], nonzero[:, 1], nonzero[:, 2]]
 
-    v_nb, v_mb, v_nnzb, v_blk, v_feat_size, v_num_heads = bsrsddmm.params[-6:]
-    bsrmm = bsrsddmm.specialize(
-        {
-            v_nb: nb,
-            v_mb: mb,
-            v_nnzb: nnzb,
-            v_blk: block_size,
-            v_feat_size: feat_size,
-            v_num_heads: num_heads,
-        }
-    )
-    sch = tvm.tir.Schedule(bsrmm)
-    sp_iteration = sch.get_sparse_iteration("sddmm")
-    h, i, j, bi, bj, f = sch.get_sp_iters(sp_iteration)
-    sch.sparse_fuse(sp_iteration, [i, j])
-    mod = lower_sparse_iter(sch.mod)
+    best_dur = 1e9
+    for ty in [2, 4, 8]:
+        sch = tvm.tir.Schedule(sddmm(mb, nb, nnzb, block_size, feat_size, num_heads))
+        sp_iteration = sch.get_sparse_iteration("sddmm")
+        h, i, j, bi, bj, f = sch.get_sp_iters(sp_iteration)
+        sch.sparse_fuse(sp_iteration, [i, j])
+        mod = lower_sparse_iter(sch.mod)
 
-    # split preprocess and compute
-    mod_preprocess = tvm.tir.transform.ExtractPreprocess()(mod)
-    mod_sddmm = tvm.tir.transform.RemovePreprocess()(mod)
+        # split preprocess and compute
+        mod_preprocess = tvm.tir.transform.ExtractPreprocess()(mod)
+        mod_sddmm = tvm.tir.transform.RemovePreprocess()(mod)
 
-    # schedule preprocess
-    sch = tir.Schedule(mod_preprocess)
-    blk = sch.get_block("binary_search_block_0_0")
-    (i,) = sch.get_loops(blk)
-    io, ii = sch.split(i, [None, 32])
-    sch.bind(ii, "threadIdx.x")
-    sch.bind(io, "blockIdx.x")
-    mod = tvm.sparse.lower_sparse_buffer(sch.mod)
-    mod = tvm.tir.transform.RemoveUnusedArgs()(mod)
-    preproc = tvm.build(mod["main"], target="cuda")
+        # schedule preprocess
+        sch = tir.Schedule(mod_preprocess)
+        blk = sch.get_block("binary_search_block_0_0")
+        (i,) = sch.get_loops(blk)
+        io, ii = sch.split(i, [None, 32])
+        sch.bind(ii, "threadIdx.x")
+        sch.bind(io, "blockIdx.x")
+        mod = tvm.sparse.lower_sparse_buffer(sch.mod)
+        mod = tvm.tir.transform.RemoveUnusedArgs()(mod)
+        preproc = tvm.build(mod["main"], target="cuda")
 
-    # compute mid
-    indptr_nd = tvm.nd.array(indptr, tvm.cuda())
-    mid_nd = tvm.nd.array(np.zeros((nnzb,), np.int32), tvm.cuda())
+        # compute mid
+        indptr_nd = tvm.nd.array(indptr, tvm.cuda())
+        mid_nd = tvm.nd.array(np.zeros((nnzb,), np.int32), tvm.cuda())
 
-    preproc(indptr_nd, mid_nd)
+        preproc(indptr_nd, mid_nd)
 
-    # schedule sddmm
-    sch = tir.Schedule(mod_sddmm)
-    blk = sch.get_block("sddmm0")
-    h, j, bi, bj, f = sch.get_loops(blk)
-    fo, fi = sch.split(f, [None, 16])
-    sch.bind(h, "blockIdx.y")
-    sch.reorder(j, fo, bi, fi, bj)
-    jo, ji = sch.split(j, [None, 4])
-    sch.bind(jo, "blockIdx.x")
-    sch.bind(ji, "threadIdx.y")
-    C_local = sch.cache_write(blk, 0, "wmma.accumulator")
-    sch.reverse_compute_at(C_local, ji)
-    new_blk = sch.blockize(bi)
-    sch.decompose_reduction(new_blk, fo)
-    A_local = sch.cache_read(blk, 1, "wmma.matrix_a")
-    B_local = sch.reverse_cache_read(blk, 3, "wmma.matrix_b", [2, 1])
-    sch.hide_buffer_access(blk, "read", [2, 4])
-    sch.tensorize(sch.get_loops(A_local)[-2], "wmma_load_a")
-    sch.tensorize(sch.get_loops(B_local)[-2], "wmma_load_b")
-    sch.tensorize(sch.get_loops(C_local)[-2], "wmma_store")
-    ax0, ax1, ax2 = sch.get_loops(blk)[-3:]
-    sch.reorder(ax2, ax1)
-    sch.tensorize(ax0, "wmma_sync")
-    sch.tensorize(sch.get_loops(sch.get_block("sddmm0_init"))[-2], "wmma_fill")
-    mod = lower_sparse_buffer(sch.mod)
-    f = tvm.build(mod["main"], target="cuda")
-    # print(f.imported_modules[0].get_source())
+        # schedule sddmm
+        sch = tir.Schedule(mod_sddmm)
+        blk = sch.get_block("sddmm0")
+        h, j, bi, bj, f = sch.get_loops(blk)
+        fo, fi = sch.split(f, [None, 16])
+        sch.bind(h, "blockIdx.y")
+        sch.reorder(j, fo, bi, fi, bj)
+        assert nnzb % ty == 0
+        jo, ji = sch.split(j, [None, ty])
+        sch.bind(jo, "blockIdx.x")
+        sch.bind(ji, "threadIdx.y")
+        C_local = sch.cache_write(blk, 0, "wmma.accumulator")
+        sch.reverse_compute_at(C_local, ji)
+        new_blk = sch.blockize(bi)
+        sch.decompose_reduction(new_blk, fo)
+        A_local = sch.cache_read(blk, 1, "wmma.matrix_a")
+        B_local = sch.reverse_cache_read(blk, 3, "wmma.matrix_b", [2, 1])
+        sch.hide_buffer_access(blk, "read", [2, 4])
+        sch.tensorize(sch.get_loops(A_local)[-2], "wmma_load_a")
+        sch.tensorize(sch.get_loops(B_local)[-2], "wmma_load_b")
+        sch.tensorize(sch.get_loops(C_local)[-2], "wmma_store")
+        ax0, ax1, ax2 = sch.get_loops(blk)[-3:]
+        sch.reorder(ax2, ax1)
+        sch.tensorize(ax0, "wmma_sync")
+        sch.tensorize(sch.get_loops(sch.get_block("sddmm0_init"))[-2], "wmma_fill")
+        mod = lower_sparse_buffer(sch.mod)
+        f = tvm.build(mod["main"], target="cuda")
+        # print(f.imported_modules[0].get_source())
 
-    ctx = tvm.cuda(0)
-    C_indptr = tvm.nd.array(np.copy(indptr).astype("int32"), device=ctx)
-    C_indices = tvm.nd.array(np.copy(indices).astype("int32"), device=ctx)
-    A_nd = tvm.nd.array(np.copy(A.reshape(-1)).astype("float16"), device=ctx)
-    B_nd = tvm.nd.array(np.copy(B.reshape(-1)).astype("float16"), device=ctx)
-    C_nd = tvm.nd.array(
-        np.zeros((num_heads * nnzb * block_size * block_size,), dtype="float16"),
-        device=ctx,
-    )
-    fargs = [A_nd, B_nd, C_nd, C_indptr, C_indices, mid_nd]
-    f(*fargs)
-    if args.check:
-        tvm.testing.assert_allclose(
-            C_ground_truth.reshape(-1),
-            C_nd.numpy(),
-            rtol=1e-2,
+        ctx = tvm.cuda(0)
+        C_indptr = tvm.nd.array(np.copy(indptr).astype("int32"), device=ctx)
+        C_indices = tvm.nd.array(np.copy(indices).astype("int32"), device=ctx)
+        A_nd = tvm.nd.array(np.copy(A.reshape(-1)).astype("float16"), device=ctx)
+        B_nd = tvm.nd.array(np.copy(B.reshape(-1)).astype("float16"), device=ctx)
+        C_nd = tvm.nd.array(
+            np.zeros((num_heads * nnzb * block_size * block_size,), dtype="float16"),
+            device=ctx,
         )
+        fargs = [A_nd, B_nd, C_nd, C_indptr, C_indices, mid_nd]
+        f(*fargs)
+        if args.check:
+            tvm.testing.assert_allclose(
+                C_ground_truth.reshape(-1),
+                C_nd.numpy(),
+                rtol=1e-2,
+            )
 
-    dur = profile_tvm_ms(f, fargs)
-    print("avg time: {} ms".format(dur))
+        dur = profile_tvm_ms(f, fargs)
+        best_dur = min(dur, best_dur)
+    print("avg time: {} ms".format(best_dur))

@@ -7,6 +7,7 @@ from sparsetir_artifact import profile_pytorch_ms
 
 
 def test_csr_spmm(pattern: str):
+    num_heads = 12
     if pattern == "pixelfly":
         csr = create_pixelfly(1, 4096 // 16, fmt="csr", block_size=16)
     elif pattern == "longformer":
@@ -15,9 +16,15 @@ def test_csr_spmm(pattern: str):
         raise KeyError("Pattern {} not supported.".format(pattern))
     g = dgl.from_scipy(csr).int()
     g = g.to(0)
-    x_gpu = torch.rand(4096, 64).to(0)
+    w_gpu = torch.rand(num_heads, g.num_edges()).half().to(0)
+    x_gpu = torch.rand(num_heads, 4096, 64).half().to(0)
 
-    measure = profile_pytorch_ms(lambda: dgl.ops.copy_u_sum(g, x_gpu))
+    measure = profile_pytorch_ms(
+        lambda: [
+            dgl.ops.u_mul_e_sum(g, x_gpu[head], w_gpu[head])
+            for head in range(num_heads)
+        ]
+    )
     print("cusparse csrmm time: \t{:.5f} ms".format(measure))
     return measure
 
