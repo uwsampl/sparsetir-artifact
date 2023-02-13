@@ -99,4 +99,3 @@ def get_dataset(dataset_name: str):
         return g, g.ndata["feat"], g.ndata["label"], split_idx, reddit.num_labels
     else:
         raise KeyError("Unknown dataset: {}".format(dataset_name))
-

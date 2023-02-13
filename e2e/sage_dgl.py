@@ -139,7 +139,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     warmup = 20
     active = 200
-   
+
     for _ in range(warmup):
         loss = train(args.dataset, model, g, feats, labels, train_idx, optimizer)
 

@@ -15,7 +15,13 @@ import tvm
 import tvm.testing
 import tvm.tir as tir
 from tvm.script import tir as T
-from tvm.sparse import FormatRewriteRule, lower_sparse_buffer, lower_sparse_iter, column_part_hyb, format_decompose
+from tvm.sparse import (
+    FormatRewriteRule,
+    lower_sparse_buffer,
+    lower_sparse_iter,
+    column_part_hyb,
+    format_decompose,
+)
 
 
 @T.prim_func
@@ -198,8 +204,7 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], num_col_parts=1):
     global kernel_args
     use_implicit_unroll = True
 
-    for forward in [True]: # [True, False]
-
+    for forward in [True]:  # [True, False]
         num_buckets = len(bucket_sizes)
         indptr, indices, _ = g.adj_sparse("csc")
         m = g.num_dst_nodes()
@@ -217,10 +222,12 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], num_col_parts=1):
         for part_id in range(num_col_parts):
             for bucket_id, _ in enumerate(bucket_sizes):
                 weight = tvm.nd.array(
-                    mask[part_id][bucket_id].numpy().reshape(-1).astype("float32"), device=tvm.cuda(0)
+                    mask[part_id][bucket_id].numpy().reshape(-1).astype("float32"),
+                    device=tvm.cuda(0),
                 )
                 rows = tvm.nd.array(
-                    row_indices[part_id][bucket_id].numpy().astype("int32"), device=tvm.cuda(0)
+                    row_indices[part_id][bucket_id].numpy().astype("int32"),
+                    device=tvm.cuda(0),
                 )
                 cols = tvm.nd.array(
                     col_indices[part_id][bucket_id].numpy().reshape(-1).astype("int32"),
@@ -270,18 +277,26 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], num_col_parts=1):
             }
             for part_id in range(num_col_parts):
                 for bucket_id in range(num_buckets):
-                    param_map[params[10 + 7 * (part_id * num_buckets + bucket_id) + 4]] = m
-                    param_map[params[10 + 7 * (part_id * num_buckets + bucket_id) + 5]] = n
-                    param_map[params[10 + 7 * (part_id * num_buckets + bucket_id) + 6]] = row_indices[
-                        part_id
-                    ][bucket_id].shape[0]
+                    param_map[
+                        params[10 + 7 * (part_id * num_buckets + bucket_id) + 4]
+                    ] = m
+                    param_map[
+                        params[10 + 7 * (part_id * num_buckets + bucket_id) + 5]
+                    ] = n
+                    param_map[
+                        params[10 + 7 * (part_id * num_buckets + bucket_id) + 6]
+                    ] = row_indices[part_id][bucket_id].shape[0]
 
-            mod["main"] = mod["main"].specialize(param_map).with_attr("horizontal_fuse", True)
+            mod["main"] = (
+                mod["main"].specialize(param_map).with_attr("horizontal_fuse", True)
+            )
 
             # schedule
             sch = tvm.tir.Schedule(mod)
             for sp_iter_name in [
-                "csrmm_{}_{}".format(i, j) for j in range(num_buckets) for i in range(num_col_parts)
+                "csrmm_{}_{}".format(i, j)
+                for j in range(num_buckets)
+                for i in range(num_col_parts)
             ]:
                 sp_iteration = sch.get_sparse_iteration(sp_iter_name)
                 o, i, j, k1, k2, k3 = sch.get_sp_iters(sp_iteration)
@@ -309,7 +324,9 @@ def create_kernels(g, feat_sizes, bucket_sizes=[], num_col_parts=1):
                     sch.unroll(j)
                     if use_implicit_unroll:
                         sch.annotate(j, "pragma_unroll_explicit", 0)
-                    io, ioi, ii = sch.split(i, [None, bucket_sizes[-1] // bucket_size, 8])
+                    io, ioi, ii = sch.split(
+                        i, [None, bucket_sizes[-1] // bucket_size, 8]
+                    )
                     sch.bind(io, "blockIdx.x")
                     sch.bind(ii, "threadIdx.y")
                     init_blk = sch.decompose_reduction(blk, fi)
@@ -400,7 +417,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     warmup = 20
     active = 200
-   
+
     for _ in range(warmup):
         loss = train(args.dataset, model, feats, labels, train_idx, optimizer)
 
