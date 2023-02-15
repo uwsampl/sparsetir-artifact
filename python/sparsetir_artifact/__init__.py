@@ -11,19 +11,28 @@ __all__ = ["profile_pytorch_ms", "profile_tvm_ms", "plot"]
 def profile_tvm_ms(f: tvm.runtime.Module, args: List[Any]) -> float:
     flush_l2 = os.getenv("FLUSH_L2", "OFF") == "ON"
     if flush_l2:
-        evaluator = f.time_evaluator(
-            f.entry_name,
-            tvm.cuda(0),
-            number=1,
-            repeat=100,
-            f_preproc="l2_cache_flush_cuda",
-        )
+        r"""
+        NOTE(Zihao): TVM's native profiler has some constant extra 
+        overhead when number=1, turn to use Triton's profiler instead.
+        """
+        # evaluator = f.time_evaluator(
+        #     f.entry_name,
+        #     tvm.cuda(0),
+        #     number=1,
+        #     repeat=100,
+        #     f_preproc="l2_cache_flush_cuda",
+        # )
+        return profile_pytorch_ms(lambda: f(*args))
     else:
         evaluator = f.time_evaluator(f.entry_name, tvm.cuda(0), number=100)
     return evaluator(*args).mean * 1000
 
 
 def profile_pytorch_ms(f: Callable[[], None]) -> float:
+    r"""
+    Use Triton's profiler when FLUSH_L2 is set to True.
+    Use PyTorch's native profiler when FLUSH_L2 is set to False.
+    """
     flush_l2 = os.getenv("FLUSH_L2", "OFF") == "ON"
     n_wait = 1
     n_warmup = 10
