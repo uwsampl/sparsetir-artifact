@@ -395,8 +395,11 @@ if __name__ == "__main__":
     data = np.random.rand(num_heads, nnzb, block_size, block_size)
     x = np.random.rand(num_heads, n, feat_size).astype("float16")
     if args.check:
-        A = sp.bsr_matrix((data.astype("float16"), indices, indptr), shape=(m, n))
-        y_ground_truth = (A * x).astype("float16")
+        y_ground_truth = []
+        for i in range(num_heads):
+            A = sp.bsr_matrix((data[i].astype("float16"), indices, indptr), shape=(m, n))
+            y_ground_truth.append((A * x[i]).astype("float16"))
+        y_ground_truth = np.concatenate(y_ground_truth, 0)
 
     best_dur = 1e9
     for coarsening_factor in [1, 2, 4]:
