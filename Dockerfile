@@ -133,7 +133,7 @@ RUN echo "y\n" | python3 download_rgcn_data.py
 RUN python3 download_huggingface_model.py
 
 # install plotting softwares
-RUN apt-get install -y texlive-font-utils gnuplot
+RUN apt-get update && apt-get install -y texlive-font-utils gnuplot
 COPY 3rdparty/gnuplot-palettes /root/gnuplot-palettes
 
 # set LD_LIBRARY_PATH
