@@ -47,7 +47,7 @@ def extract_data():
                 mem_str = display_name
                 assert (dataset, "graphiler") in exec_times
                 graphiler_dur = exec_times[(dataset, "graphiler")]
-                graphiler_mem = exec_times[(dataset, "graphiler")]
+                graphiler_mem = mem[(dataset, "graphiler")]
 
                 if not (dataset, "pyg-bmm") in mem and not (dataset, "pyg-slice") in mem:
                     speed_str += " 0"
