@@ -2,7 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/471216066.svg)](https://zenodo.org/badge/latestdoi/471216066)
 
-This repo stores scripts for setting up environments and reproducing results in paper [SparseTIR: Composable Abstractions for Deep Learning](https://arxiv.org/abs/2207.04606), please checkout [SparseTIR repo](https://github.com/uwsampl/sparsetir) for core implementation of SparseTIR.
+This repository contains scripts for setting up environments and reproducing results presented in the ASPLOS 2023 paper entitled [SparseTIR: Composable Abstractions for Deep Learning](https://dl.acm.org/doi/10.1145/3582016.3582047). To access the core implementation of SparseTIR (i.e., the compiler), please visit the [SparseTIR repository](https://github.com/uwsampl/sparsetir). Additionally, we have written a post called [Retrospective on SparseTIR Artifact](https://gist.github.com/yzh119/c4425ee0375a98a36a8786f6ba9d4ee8) in which we discuss some issues we encountered when preparing this artifact. Please give it a read if you're interested.
 
 ## Prerequisite
 
